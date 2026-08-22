@@ -11,15 +11,25 @@ cek terbaru ke npm, **upgrade sekali-klik** dengan dialog konfirmasi).
 
 - **Registri tunable** (`src/tunables.ts`): sumber tunggal daftar setting
   kustom. Tiap tunable = `{ id, configKey, label, description, tooltip, min,
-  max, default, unit, presets?, restart?, apply(ctx, value) }`. Menambah
-  setting baru = tambah SATU entri + rebuild host — browser half render
-  otomatis dari `GET /api/tunables`, tanpa sentuh client.
+  max, default, unit, presets?, restart?, consumer?, readApplied?,
+  apply(ctx, value) }`. `consumer`: 'host' (default) | 'browser' (nilai
+  dipakai client half plugin lain → apply host no-op + teks status beda);
+  `readApplied(ctx)`: sumber nilai ter-apply utk `/api/status` (default:
+  codeRuntime.config). Menambah setting baru = tambah SATU entri + rebuild
+  host — browser half render otomatis dari `GET /api/tunables`, tanpa sentuh
+  client.
 - **Tunable v1 `runCodeMaxWallMs`** (configKey `maxWallMs`): membesarkan batas
   `run_code` dari 600.000 ms (10 menit) ke default 3.600.000 ms (1 jam) —
   menutup jebakan "approval hangus saat plan dibaca >10 menit" di preset
   `code` (exit_plan_mode berjalan di dalam run_code; timeout menghitung waktu
   baca plan; terbukti 2× di sesi 5ae70e81). Nilai **live**: `run()` code
   runtime membaca `this.config.maxWallMs` di setiap run.
+- **Tunable v2/v3 `gitStatePollMs` + `gitStateCmdTimeoutMs`** (milik plugin
+  dsh-git-state, konsep CONSUMER): pertama dikonsumsi browser half
+  dsh-git-state (`consumer: 'browser'`, apply host no-op — client bind
+  namespace ini sendiri); kedua dikonsumsi host half-nya lewat objek bersama
+  'customSettingsApplied'. Preset poll: 30 dtk / 1 mnt / 5 mnt / 15 mnt /
+  30 mnt / 1 jam / 3 jam / 6 jam / 12 jam / 1 hari.
 - **Kartu versi dsh**: versi terpasang tampil instan (lokal), "Cek versi
   terbaru" (npm registry dist-tag latest), tombol Upgrade → npm install -g →
   restart dsh otomatis (detached, setelah respons terkirim).
@@ -45,6 +55,13 @@ cordis.patch.yml       # - insert: [{id: custom-settings, name: dsh-custom-setti
   0 kemunculan freeze) → mutasi `codeRuntime.config.maxWallMs` langsung dipakai
   run berikutnya (`setTimeout(..., this.config.maxWallMs)` di tiap run()).
   `codeRuntime` dibaca via `ctx.get('codeRuntime')` (opsional/defensive).
+- **Objek bersama lintas-plugin** (`'customSettingsApplied'`): apply()
+  mem-provide SATU service cordis berisi nilai utk plugin konsumen (kini:
+  `{ gitState: { cmdTimeoutMs } }` untuk host half dsh-git-state). Konsumen
+  membaca LAZY via `ctx.get(...)` per-request → urutan boot dua arah aman;
+  apply() tunable memutasi objek IN-PLACE → perubahan live tanpa event.
+  Diverifikasi micro-test standalone cordis (provide/get dua urutan + mutasi
+  in-place terbaca) SEBELUM dipakai — seam baru wajib diverifikasi dulu.
 - **Route API** (`ctx.webServer`, pola file-explorer, `kind: 'exact'`):
   `GET /tunables`, `GET /status` (`{applied, installedVersion,
   lastRestartFailed}`), `GET /version`, `POST /upgrade`.
@@ -120,6 +137,21 @@ cordis.patch.yml       # - insert: [{id: custom-settings, name: dsh-custom-setti
   models 10, plugins 15, agent-presets 20, archived-sessions 25. Header
   Settings (`settings.header` dll) adalah chrome global shell — jangan
   sembunyikan dari plugin.
+- **Face `provide` WAJIB return `void`** kalau hasilnya dibungkus
+  `ctx.effect(() => provide(...))`: deklarasi return `unknown` memicu TS2769
+  overload effect (kejadian nyata 19 Aug 2026). Lifetime service milik fiber
+  provider — framework cordis membersihkannya saat plugin reload/dispose,
+  disposer manual tidak perlu.
+- **Stub `ctx.effect` untuk smoke test host WAJIB MENGEKSEKUSI callback**
+  segera (semantik cordis), bukan sekadar mengumpulkannya (kejadian nyata 19
+  Aug 2026): stub yang hanya push callback membuat provide + SEMUA register
+  route tidak jalan → smoke tampak "apply tidak melakukan apa-apa" dan
+  diagnosis sempat salah arah ke bundle basi.
+- **Handoff nilai lintas plugin pakai provide/get lazy + mutasi in-place**
+  (pola baru 19 Aug 2026, lihat Arsitektur): assignment properti mentah di
+  ctx ternyata TIDAK throw di cordis terpasang, tetap pakai `provide()`
+  karena idiomatik + terlacak; JANGAN ganti referensi objek bersama saat
+  apply (konsumen yang membaca lazy bisa kehilangan perubahan).
 
 ## Verifikasi
 
@@ -127,8 +159,8 @@ cordis.patch.yml       # - insert: [{id: custom-settings, name: dsh-custom-setti
 pnpm --filter dsh-custom-settings build        # host ESM + client CJS
 # setelah dsh plugin add + restart dsh:
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/plugins/dsh-custom-settings/client.js  # 200
-curl -sS http://127.0.0.1:3080/plugins/dsh-custom-settings/api/tunables    # JSON deskriptor
-curl -sS http://127.0.0.1:3080/plugins/dsh-custom-settings/api/status      # applied.maxWallMs=3600000 + installedVersion
+curl -sS http://127.0.0.1:3080/plugins/dsh-custom-settings/api/tunables    # JSON deskriptor — 3 tunable; gitStatePollMs punya 10 preset + consumer=browser
+curl -sS http://127.0.0.1:3080/plugins/dsh-custom-settings/api/status      # applied.maxWallMs=3600000 + installedVersion (+ gitStateCmdTimeoutMs setelah ubah nilai)
 curl -sS http://127.0.0.1:3080/plugins/dsh-custom-settings/api/version     # upToDate=true saat latest==terpasang
 curl -sS -X POST http://127.0.0.1:3080/plugins/dsh-custom-settings/api/upgrade  # 409 already-up-to-date
 # UI: Settings → Custom Settings (paling bawah); ubah nilai → status "Aktif" berubah

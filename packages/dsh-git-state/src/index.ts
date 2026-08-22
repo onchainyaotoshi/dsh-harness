@@ -25,8 +25,15 @@
  * Sinyal proses hidup di worktree tetap dari scan /proc (inUse).
  *
  * Caching: memo TTL 5 dtk + dedup in-flight (per-workspace repo state, scan
- * /proc) supaya poll client (30 dtk) tidak membanjiri git maupun saling
- * tumpang tindih membengkakkan beban.
+ * /proc) supaya poll client (default 30 dtk) tidak membanjiri git maupun
+ * saling tumpang tindih membengkakkan beban.
+ *
+ * Tuning via tab Custom Settings (plugin dsh-custom-settings, namespace
+ * 'custom-settings'): gitStatePollMs (interval poll — dibaca browser half)
+ * dan gitStateCmdTimeoutMs (timeout perintah git — dibaca host half LAZY
+ * per-request dari service cordis 'customSettingsApplied', objek bersama yang
+ * di-provide dsh-custom-settings). Live tanpa restart; plugin settings absen
+ * atau nilai tidak sah → fallback default + clamp.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -37,7 +44,14 @@ export const name = 'git-state-host'
 export const inject = ['webServer', 'shell', 'workspaceRegistry', 'sessions']
 
 const API_PREFIX = '/plugins/dsh-git-state/api'
-const CMD_TIMEOUT_MS = 6000
+// Timeout perintah git: default 6 dtk; tuning live via tunable
+// gitStateCmdTimeoutMs (tab Custom Settings). Clamp ganda di konsumen karena
+// ~/.dsh/settings.yaml bisa diedit manual di luar schema.
+const DEFAULT_CMD_TIMEOUT_MS = 6000
+const CMD_TIMEOUT_MIN_MS = 1000
+// Max mengikuti preset terbesar tunable (1 hari) — pilihan pemilik;
+// dedup in-flight menahan beban bila ada perintah lama menggantung.
+const CMD_TIMEOUT_MAX_MS = 86_400_000
 const STDOUT_MAX_BYTES = 256 * 1024
 const MAX_FILES = 200
 const MAX_STASHES = 30
@@ -93,11 +107,20 @@ function quoteShell(s: string): string {
 
 interface RunOutcome { ok: boolean; text: string; err: string }
 
+/** Timeout efektif dari objek bersama 'customSettingsApplied'; fallback default bila absen/tidak sah. */
+function cmdTimeoutMs(ctx: Context): number {
+  const shared = (ctx as unknown as { get<T>(key: string): T | undefined })
+    .get<{ gitState?: { cmdTimeoutMs?: number } }>('customSettingsApplied')
+  const raw = shared?.gitState?.cmdTimeoutMs
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_CMD_TIMEOUT_MS
+  return Math.min(CMD_TIMEOUT_MAX_MS, Math.max(CMD_TIMEOUT_MIN_MS, Math.round(raw)))
+}
+
 async function runCmd(ctx: Context, workdir: string, command: string): Promise<RunOutcome> {
   const req: ShellExecRequest = {
     command,
     workdir,
-    timeoutMs: CMD_TIMEOUT_MS,
+    timeoutMs: cmdTimeoutMs(ctx),
     stdoutMaxBytes: STDOUT_MAX_BYTES,
   }
   const spec = ctx.shell.resolve(req)

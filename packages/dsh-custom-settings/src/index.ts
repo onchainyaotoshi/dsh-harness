@@ -59,6 +59,12 @@ interface WebServerRoute {
 interface WebServerFace {
   register(route: WebServerRoute): unknown
 }
+/** Face cordis untuk menyatakan service bernama (objek bersama lintas plugin). */
+interface ProvideFace {
+  // void: disposables service milik fiber provider — framework cordis
+  // membersihkannya saat plugin reload/dispose (kepemilikan lifetime fiber).
+  provide(name: string, value: unknown): void
+}
 
 interface HttpError {
   status: number
@@ -195,6 +201,15 @@ export function apply(ctx: Context): void {
   const settings = (ctx as unknown as { settings: SettingsFace }).settings
   const webServer = (ctx as unknown as { webServer: WebServerFace }).webServer
 
+  /* ---- objek bersama lintas-plugin (dibaca lazy oleh host half plugin lain) ---- */
+  // Service cordis 'customSettingsApplied': konsumen (dsh-git-state host)
+  // membaca via ctx.get per-request — aman untuk urutan boot dua arah, dan
+  // perubahan nilai live karena apply() tunable memutasi objek IN-PLACE.
+  const defaultOf = (id: string): number => TUNABLES.find((t) => t.id === id)?.default ?? 0
+  const appliedShared = { gitState: { cmdTimeoutMs: defaultOf('gitStateCmdTimeoutMs') } }
+  const provide = (ctx as unknown as ProvideFace).provide.bind(ctx)
+  ctx.effect(() => provide('customSettingsApplied', appliedShared))
+
   /* ---- namespace settings + apply live (boot & setiap perubahan) ---- */
   const fields: Record<string, unknown> = {}
   for (const t of TUNABLES) {
@@ -219,14 +234,23 @@ export function apply(ctx: Context): void {
   ctx.effect(() => scope.watch(applyAll))
 
   /* ---- helper status ---- */
-  const appliedValues = (): Record<string, number> | null => {
+  // Nilai ter-apply per tunable: baca dari konsumennya masing-masing —
+  // default dari codeRuntime.config, atau readApplied kustom (mis. objek
+  // bersama lintas-plugin). Tunable tanpa nilai ter-apply (mis. konsumen
+  // browser) sekadar tidak ada di map.
+  const appliedValues = (): Record<string, number> => {
     const runtime = (ctx as unknown as { get<T>(key: string): T | undefined })
       .get<{ config?: Record<string, unknown> }>('codeRuntime')
-    if (!runtime?.config) return null
     const out: Record<string, number> = {}
     for (const t of TUNABLES) {
-      const n = runtime.config[t.configKey ?? t.id]
-      if (typeof n === 'number') out[t.id] = n
+      let n: number | undefined
+      if (typeof t.readApplied === 'function') {
+        try { n = t.readApplied(ctx) } catch { n = undefined }
+      } else if (runtime?.config) {
+        const v = runtime.config[t.configKey ?? t.id]
+        if (typeof v === 'number') n = v
+      }
+      if (typeof n === 'number' && Number.isFinite(n)) out[t.id] = n
     }
     return out
   }
@@ -247,6 +271,7 @@ export function apply(ctx: Context): void {
         unit: t.unit,
         presets: t.presets,
         restart: t.restart === true,
+        consumer: t.consumer === 'browser' ? 'browser' : 'host',
       })))
     },
   }))

@@ -19,7 +19,11 @@ terdaftar. Klik strip untuk melihat detail.
   lain` + jumlah perubahan tiap worktree, daftar PR open (link ke GitHub).
 - Auto-select workspace mengikuti sesi aktif (cwd canonical); override manual
   lewat tab workspace bertahan sampai sesi berganti.
-- Auto-refresh 30 detik + tombol refresh manual.
+- Auto-refresh default 30 detik + tombol refresh manual. Interval bisa diatur
+  live dari **Settings → Custom Settings** (preset 30 dtk s.d. 1 hari) — tiap
+  tab memakai nilai baru pada siklus refresh berikutnya, tanpa restart.
+- Timeout perintah git di host (default 6 dtk) juga bisa dinaikkan untuk
+  repo/worktree besar dari halaman yang sama.
 - Semua perintah git **read-only**, dibatasi ke workspace terdaftar.
 
 ## Instalasi

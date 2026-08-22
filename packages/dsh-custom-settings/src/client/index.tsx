@@ -49,6 +49,8 @@ interface Tunable {
   unit?: string
   presets?: TunablePreset[]
   restart?: boolean
+  /** 'host' (default) | 'browser' — siapa konsumen nilai (utk teks status). */
+  consumer?: string
 }
 interface StatusResponse {
   applied: Record<string, number> | null
@@ -344,6 +346,8 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
                 <span className="dscs-badge dscs-badge-live">✓ Aktif: {fmtMs(appliedNow as number)}</span>
               ) : appliedNow !== undefined ? (
                 <span className="dscs-hint">Berjalan: {fmtMs(appliedNow)} · draft: {fmtMs(Number(draftOf(t)))}</span>
+              ) : t.consumer === 'browser' ? (
+                <span className="dscs-hint">Dipakai browser half (strip Git State) — nilai baru aktif di tiap tab pada siklus refresh berikutnya.</span>
               ) : (
                 <span className="dscs-hint">codeRuntime tidak tersedia — belum diterapkan.</span>
               )}

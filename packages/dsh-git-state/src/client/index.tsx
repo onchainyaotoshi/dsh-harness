@@ -8,7 +8,10 @@
  *
  * Workspace aktif dicocokkan dari ctx.sessions.list (cwd canonical ↔
  * workspace.path); override manual lewat tab workspace bertahan sampai sesi
- * berganti. Poll otomatis 30 dtk + tombol refresh manual.
+ * berganti. Poll otomatis default 30 dtk — interval bisa diatur live dari tab
+ * Custom Settings (dsh-custom-settings, namespace 'custom-settings', field
+ * gitStatePollMs) via settingsScope.bind; plugin absen → fallback default.
+ * Tombol refresh manual tetap.
  *
  * Styling: WAJIB token --dsw-* (theme-aware) + pola shell repo (row radius 8px
  * + hover --dsw-alias-interactive-bg-hover, ikon 16px feather-style SVG
@@ -19,10 +22,46 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions, SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
 
 export const name = 'git-state'
-export const inject = ['slots', 'sessions']
+// settingsScope: sumber tunable gitStatePollMs (namespace custom-settings).
+// WAJIB dideklarasi di sini — loader client menolak akses properti ctx yang
+// tidak ada di inject ("cannot get property ... without inject").
+export const inject = ['slots', 'sessions', 'settingsScope']
 
 const API = '/plugins/dsh-git-state/api/state'
-const POLL_MS = 30_000
+// Interval poll: field gitStatePollMs di namespace 'custom-settings' (tab
+// Custom Settings), LIVE mengikuti perubahan nilai (subscribe scope → interval
+// dibuat ulang). Fallback default saat plugin settings absen/field kosong.
+// Clamp GANDA di konsumen (schema sudah min/max) karena ~/.dsh/settings.yaml
+// bisa diedit manual di luar UI.
+const DEFAULT_POLL_MS = 30_000
+const POLL_MIN_MS = 10_000
+const POLL_MAX_MS = 86_400_000
+
+/* ---------- face settingsScope (loose — pola dsh-custom-settings) ---------- */
+interface ScopeSnapshot {
+  status: 'loading' | 'ready' | 'unavailable'
+  value?: Record<string, number>
+}
+interface ScopeLike {
+  getSnapshot(): ScopeSnapshot
+  subscribe(cb: () => void): () => void
+}
+interface SettingsScopeFace {
+  bind(spec: { namespace: string }): ScopeLike
+}
+const EMPTY_SNAPSHOT: ScopeSnapshot = { status: 'unavailable' }
+/** Scope fallback konstan: hook TIDAK boleh kondisional. */
+const NO_SCOPE: ScopeLike = { getSnapshot: () => EMPTY_SNAPSHOT, subscribe: () => () => {} }
+
+/** Format ringkas utk label panel: 30 dtk / 5 mnt / 2 jam / 1 hari. */
+function fmtInterval(ms: number): string {
+  if (ms >= 86_400_000) return `${Math.round(ms / 86_400_000)} hari`
+  if (ms >= 3_600_000 && ms % 3_600_000 === 0) return `${ms / 3_600_000} jam`
+  if (ms >= 3_600_000) return `${(ms / 3_600_000).toFixed(1)} jam`
+  if (ms >= 60_000 && ms % 60_000 === 0) return `${ms / 60_000} mnt`
+  if (ms >= 60_000) return `${Math.round(ms / 60_000)} mnt`
+  return `${Math.round(ms / 1000)} dtk`
+}
 
 /* ---------- wire types (cocok dengan host half) ---------- */
 interface ChangeFile { code: string; path: string }
@@ -198,7 +237,7 @@ const PANEL_CSS = `
 `
 
 /* ---------- komponen utama ---------- */
-function GitStateDock(props: { sessions?: ISessions }): React.ReactElement {
+function GitStateDock(props: { sessions?: ISessions; pollScope?: ScopeLike }): React.ReactElement {
   const [data, setData] = useState<WorkspaceState[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState('')
@@ -214,6 +253,19 @@ function GitStateDock(props: { sessions?: ISessions }): React.ReactElement {
   const currentCwd = currentId === undefined ? undefined : snap.byId?.[currentId]?.cwd
   const currentIdRef = useRef<string | undefined>(undefined)
   currentIdRef.current = currentId
+
+  // Interval poll dari Custom Settings (live). WAJIB bungkus arrow di
+  // useSyncExternalStore: method scope membaca this (pola dsh-custom-settings);
+  // referensi mentah melepas this → TypeError saat render.
+  const pollScope = props.pollScope ?? NO_SCOPE
+  const scopeSnap = useSyncExternalStore(
+    (cb) => pollScope.subscribe(cb),
+    () => pollScope.getSnapshot(),
+  )
+  const rawPoll = scopeSnap.value?.gitStatePollMs
+  const pollMs = typeof rawPoll === 'number' && Number.isFinite(rawPoll)
+    ? Math.min(POLL_MAX_MS, Math.max(POLL_MIN_MS, Math.round(rawPoll)))
+    : DEFAULT_POLL_MS
 
   const load = useCallback(async (opts?: { spin?: boolean }) => {
     if (opts?.spin) setBusy(true)
@@ -235,9 +287,9 @@ function GitStateDock(props: { sessions?: ISessions }): React.ReactElement {
   // bergantung pada id sesi tab ini).
   useEffect(() => { void load() }, [currentId, load])
   useEffect(() => {
-    const t = setInterval(() => void load(), POLL_MS)
+    const t = setInterval(() => void load(), pollMs)
     return () => clearInterval(t)
-  }, [load])
+  }, [load, pollMs])
 
   // Auto-select workspace sesi aktif; override manual bertahan sampai sesi
   // berganti (paritas dsh-file-explorer).
@@ -426,7 +478,7 @@ function GitStateDock(props: { sessions?: ISessions }): React.ReactElement {
             <span className="dshgs-panel-title"><GitIcon color="inherit" /> Git State</span>
             <span className="dshgs-ws-tabs">{tabs}</span>
             <span className="dshgs-spacer" />
-            <span className="dshgs-panel-meta">auto-refresh 30 dtk{syncMeta !== '' ? ' · ' + syncMeta : ''}</span>
+            <span className="dshgs-panel-meta">auto-refresh {fmtInterval(pollMs)}{syncMeta !== '' ? ' · ' + syncMeta : ''}</span>
           </div>
           <div className="dshgs-panel-body">{panelBody}</div>
         </div>
@@ -437,7 +489,15 @@ function GitStateDock(props: { sessions?: ISessions }): React.ReactElement {
 
 /* ---------- registrasi ---------- */
 export function apply(ctx: Context): void {
-  const sessions = (ctx as unknown as { sessions?: ISessions }).sessions
+  const ctxAny = ctx as unknown as {
+    sessions?: ISessions
+    settingsScope?: SettingsScopeFace
+  }
+  const sessions = ctxAny.sessions
+  // Namespace Custom Settings (dsh-custom-settings): sumber gitStatePollMs.
+  // Bind sekali di apply (bukan per render); absen → degrade halus ke default.
+  const settingsScope = ctxAny.settingsScope
+  const pollScope = settingsScope ? settingsScope.bind({ namespace: 'custom-settings' }) : undefined
 
   // Stylesheet scoped + disposable (pola dsh-file-explorer).
   ctx.effect(() => {
@@ -457,7 +517,7 @@ export function apply(ctx: Context): void {
     }
   }
   slots.slots.inject('conversation.input.dock', () => slots.slots.register(
-    { name: 'conversation.input.dock', id: 'git-state', order: -10, inject: () => ({ sessions }) },
+    { name: 'conversation.input.dock', id: 'git-state', order: -10, inject: () => ({ sessions, pollScope }) },
     GitStateDock,
   ))
 }

@@ -10,6 +10,11 @@ halaman **Settings → Custom Settings** (tab paling bawah).
   (exit_plan_mode berjalan di dalam run_code). Default plugin: **1 jam**,
   diubah kapan pun dari UI. Nilai **berlaku langsung tanpa restart** dan
   bertahan di `~/.dsh/settings.yaml`.
+- **Tunable Git State (milik plugin dsh-git-state)** — `Interval auto-refresh
+  Git State` (default 30 dtk; preset 30 dtk / 1 mnt / 5 mnt / 15 mnt / 30 mnt /
+  1 jam / 3 jam / 6 jam / 12 jam / 1 hari) dan `Timeout perintah git` (default
+  6 dtk). Dua-duanya berlaku langsung tanpa restart; nilai pertama dipakai oleh
+  browser half dsh-git-state, kedua oleh host half-nya.
 - **Cek versi dsh** — versi terpasang tampil otomatis; tombol "Cek versi
   terbaru" membandingkan dengan registry npm.
 - **Upgrade sekali-klik** — saat ada versi baru: tombol Upgrade + dialog

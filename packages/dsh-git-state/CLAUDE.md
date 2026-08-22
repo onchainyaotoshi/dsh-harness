@@ -8,8 +8,9 @@ pengetahuan teknis & lesson learned KHUSUS paket ini.
 
 Satu baris di atas composer (slot `conversation.input.dock`) yang menampilkan
 status git workspace aktif: branch, ahead/behind vs upstream, jumlah perubahan
-uncommitted, stash, worktree lain, PR open. Klik strip → panel detail.
-Auto-refresh 30 dtk. Tujuan: menghilangkan "blank state" — tanpa buka terminal,
+uncommitted, stash, worktree lain, PR open. Klik strip → panel detail. Auto-refresh default
+30 dtk — interval & timeout perintah git diatur dari tab Custom Settings
+(dsh-custom-settings). Tujuan: menghilangkan "blank state" — tanpa buka terminal,
 pemilik langsung tahu apakah workspace-nya ada uncommitted/stash/worktree/PR.
 
 ## Arsitektur & seam
@@ -33,14 +34,26 @@ cordis.patch.yml      # layer: - insert: [{ id: git-state, name: dsh-git-state }
   refs/heads/x` / `detached`), `gh pr list --state open --json ...`
   (best-effort → null). Memo per path workspace TTL 5 dtk + dedup in-flight
   (request tumpang tindih berbagi satu jalan, bukan menggandakan). Timeout per
-  perintah 6 dtk.
-- **Browser half** (`inject: ['slots','sessions']`): registrasi WAJIB lewat
-  `ctx.slots.inject` (anti-race); slot kind list wajib `options.id`
-  (`'git-state'`), `order: -10` (render ascending; occupant bawaan todo=0,
-  goal=10, queue=20 → kita paling atas). Workspace aktif dicocokkan dari
-  `sessions.list` (SnapshotStore; cwd canonical ↔ workspace.path, pola
-  dsh-file-explorer); override manual via tab bertahan sampai sesi berganti.
-  Poll `setInterval` 30 dtk di useEffect (cleanup wajib).
+  perintah default 6 dtk - TUNABLE LIVE `gitStateCmdTimeoutMs`: dibaca LAZY
+  per-request dari service cordis 'customSettingsApplied' (objek bersama yang
+  di-provide dsh-custom-settings; mutasi in-place -> nilai baru berlaku request
+  berikutnya, selambat-lambatnya setelah memo TTL kedaluwarsa). Plugin settings
+  absen / nilai tidak sah -> default + clamp [1 dtk .. 24 jam] di konsumen
+  (max sengaja disamakan preset terbesar — pilihan pemilik 19 Aug 2026;
+  ~/.dsh/settings.yaml bisa diedit manual di luar schema).
+- **Browser half** (`inject: ['slots','sessions','settingsScope']`):
+  registrasi WAJIB lewat `ctx.slots.inject` (anti-race); slot kind list wajib
+  `options.id` (`'git-state'`), `order: -10` (render ascending; occupant
+  bawaan todo=0, goal=10, queue=20 → kita paling atas). Workspace aktif
+  dicocokkan dari `sessions.list` (SnapshotStore; cwd canonical ↔
+  workspace.path, pola dsh-file-explorer); override manual via tab bertahan
+  sampai sesi berganti. Poll `setInterval` DEFAULT 30 dtk di useEffect
+  (cleanup wajib) - TUNABLE LIVE `gitStatePollMs`: bind namespace
+  'custom-settings' SEKALI di apply (`settingsScope.bind`, pola
+  dsh-custom-settings) → snapshot via `useSyncExternalStore` (arrow wrapper
+  wajib) → interval dibuat ulang saat nilai berubah; label panel dinamis
+  (fmtInterval). Fallback default saat plugin settings absen/field kosong;
+  clamp [10s..24 jam] di konsumen.
 - **Deteksi worktree aktif** (18 Aug 2026): `git worktree list` TIDAK
   menandai checkout yang sedang dipakai — blok pertama SELALU checkout utama
   (dibuktikan: dijalankan dari 5 worktree camis hasilnya sama). Sinyal
@@ -148,6 +161,36 @@ cordis.patch.yml      # layer: - insert: [{ id: git-state, name: dsh-git-state }
 - **Jangan restart dsh sembarangan** (18 Aug 2026): deployment ini punya sesi
   lain yang aktif; perubahan yang butuh restart (install plugin baru) wajib
   berhenti di titik "tinggal restart" dan menunggu aba-aba pemilik.
+- **Tuning lintas plugin = service cordis 'customSettingsApplied', dibaca
+  LAZY** (19 Aug 2026): dsh-custom-settings mem-provide SATU objek bersama
+  (`ctx.provide('customSettingsApplied', { gitState: {...} })`); konsumen
+  membaca via `ctx.get(...)` per-request (pola defensif `sessionQuery`).
+  Urutan boot dua arah aman (get key absen = undefined, TIDAK throw);
+  perubahan nilai live karena apply() memutasi objek IN-PLACE (referensi
+  tidak pernah diganti). Diverifikasi micro-test standalone
+  @deepseek-ai/cordis sebelum dipakai. JANGAN terima timeout dari client via
+  query param — itu lever DoS di route non-PRIVILEGED.
+- **Smoke test host half: memo TTL per PATH workspace** (kejadian nyata 19
+  Aug 2026): menguji clamp/timeout dengan path workspace SAMA membuat kasus
+  ke-2 dst. kena cache 5 dtk — shell tidak pernah jalan lagi dan semua hasil
+  tampak "tidak berubah". Stub `workspaceRegistry.list()` WAJIB mengembalikan
+  path unik per request.
+- **React hooks TIDAK boleh kondisional**: scope settings bisa absen →
+  pakai fallback store KONSTAN (`NO_SCOPE`) supaya `useSyncExternalStore`
+  selalu dipanggil dengan jumlah sama tiap render; jangan `if (scope)` di
+  sekitar hook.
+- **Menambah konsumsi service di client half WAJIB tambah namanya ke
+  `export const inject`** (kejadian nyata 19 Aug 2026): mengakses
+  `ctx.settingsScope` tanpa mendeklarasikannya membuat loader client menolak
+  seluruh entry saat boot — "failed to apply loader entry ... cannot get
+  property \"settingsScope\" without inject" — dan slot git-state hilang dari
+  halaman. Gejalanya muncul BARU setelah restart+refresh, bukan saat build
+  (tsdown tidak tahu kontrak loader). Pola benar ada di client
+  dsh-custom-settings: `inject = ['settingsScope', 'slots']`.
+- **`tsc --noEmit` standalone punya BASELINE error** (tanpa @types/node:
+  TS2307 node:*, TS2591 process, TS2769 overload effect untuk face yang
+  return unknown): jangan panik — filter error berdasarkan identifier kode
+  baru; kalau nol, baseline aman (tsdown tidak menjalankan typecheck penuh).
 
 ## Verifikasi
 
@@ -155,6 +198,11 @@ cordis.patch.yml      # layer: - insert: [{ id: git-state, name: dsh-git-state }
 # di deployment, SETELAH dsh di-restart
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/plugins/dsh-git-state/client.js   # 200
 curl -sS http://127.0.0.1:3080/plugins/dsh-git-state/api/state | head -c 500                      # JSON workspace
+# tuning Custom Settings (setelah restart + ubah nilai dari UI):
+curl -sS http://127.0.0.1:3080/plugins/dsh-custom-settings/api/tunables | grep -o '"id":"gitState[^"]*"'  # 2 entri
+curl -sS http://127.0.0.1:3080/plugins/dsh-custom-settings/api/status | grep -o '"gitStateCmdTimeoutMs":[0-9]*'
+# UI: meta panel "auto-refresh <n>" ikut gitStatePollMs tanpa restart;
+# smoke offline (tanpa dsh): stub ctx + path workspace unik per kasus (lihat lesson memo).
 ```
 
 Bandingkan nilai strip dengan CLI: `git -C <ws> status --porcelain=v1`,

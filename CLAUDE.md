@@ -39,8 +39,8 @@ packages/
     src/client/index.ts   # browser half: flip isLoopback sebelum settings bind
     cordis.patch.yml      # layer: - insert: [{ id: tunnel-loopback, name: dsh-tunnel-loopback }]
   dsh-git-state/          # strip status git (branch/perubahan/stash/worktree/PR) di atas composer
-    src/index.ts          # host half (Node): route HTTP GET /plugins/dsh-git-state/api/state (git read-only)
-    src/client/index.tsx  # browser half: slot conversation.input.dock (order -10, klik = panel detail)
+    src/index.ts          # host half (Node): route HTTP GET /plugins/dsh-git-state/api/state (git read-only; timeout via service customSettingsApplied)
+    src/client/index.tsx  # browser half: slot conversation.input.dock (order -10); interval poll dari Custom Settings
     cordis.patch.yml      # layer: - insert: [{ id: git-state, name: dsh-git-state }]
   dsh-session-archive/    # halaman kelola sesi terarsip (Settings → Archived Sessions) + unarchive
     src/index.ts          # host half: subclass WorkspaceRegistry (unarchiveSession) + route POST /api/unarchive
@@ -52,7 +52,7 @@ packages/
     scripts/patch-core.mjs  # sumber tunggal logika patch — menu baris sesi TIDAK punya seam (rc.6/rc.7)
     scripts/apply-patch.mjs # CLI manual di atas core (fallback — host half sudah otomatis)
     cordis.patch.yml      # layer: - insert: [{id: copy-link-sesi, name: dsh-copy-link-sesi}]
-  dsh-custom-settings/    # tab Settings "Custom Settings" (order 26): tunable live + cek/upgrade versi dsh
+  dsh-custom-settings/    # tab Settings "Custom Settings" (order 26): tunable live (juga milik plugin lain, mis. git-state) + cek/upgrade versi dsh
     src/tunables.ts       # SUMBER TUNGGAL daftar tunable (tambah setting = 1 entri, UI render otomatis)
     src/index.ts          # host half: settings.register + apply live ke codeRuntime.config + 4 route API (termasuk POST /api/upgrade)
     src/client/index.tsx  # browser half: slot settings.section (order 26) — form tunable + tooltip + dialog upgrade
