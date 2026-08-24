@@ -101,6 +101,20 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
 - **Privasi repo**: konten skill pihak ketiga TIDAK pernah masuk repo
   (diekstrak/copy hanya runtime di machine user); kode WAJIB `homedir()` —
   tanpa path absolut `/home/*`.
+- **Command Claude Code TIDAK tool-agnostik — adaptasikan via `adaptCommandText`**
+  (incident 24 Aug 2026): `/code-review` asli ("Use a Haiku agent", "5 parallel
+  Sonnet agents", "gh bash command") membuat agent DSH sesi restricted (hanya
+  `run_code` yang langsung callable) memanggil `read`/`glob` → "unknown tool",
+  lalu loop 6× "invalid arguments: missing required property description" →
+  user abort. Adaptasi (hanya command `code-review`): nama model/tool → istilah
+  netral (cheap subagent / full subagents / gh CLI via shell) + catatan
+  toolset-agnostik di Notes. Cache Claude Code tetap ASLI — yang berubah hanya
+  salinan bridge.
+- **`copyTree` skip bila target lebih baru (mtime)** — edit manual di
+  `~/.dsh/claude-bridge/<entry>` TIDAK tertimpa saat boot berikutnya, selama
+  sumber cache tidak lebih baru. Kalau perubahan harus permanen & idempoten,
+  masukkan ke logika plugin (adaptCommandText adalah contohnya — satu sumber
+  di repo), bukan edit-edit manual.
 - **`.optional()` TIDAK ADA di schemastery — jangan tulis gaya zod** (incident
   24 Aug 2026): `bridgeDir: z.string().optional()` membuat import plugin GAGAL
   saat boot -> `plugin tree failed to load` -> dsh crash-loop -> website 502.

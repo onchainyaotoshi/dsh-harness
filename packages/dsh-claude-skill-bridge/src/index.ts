@@ -164,6 +164,26 @@ function ensureName(frontmatter: string, name: string): string {
   return `---\nname: ${name}\ndescription: ${name}\n---\n${frontmatter}`
 }
 
+/** Adaptasi tool-agnostik untuk command Claude Code — protokol asli dipertahankan,
+ *  nama-nama tool/model khusus Claude Code diganti dengan istilah netral yang
+ *  sama-sama dimengerti Claude Code (Agent/subagent) dan DSH (subagent/workflow).
+ *  Latar belakang (incident 24 Aug 2026): /code-review asli ("Use a Haiku agent",
+ *  "5 parallel Sonnet agents", "gh bash command") membuat agent DSH memanggil
+ *  tool dengan argumen yang salah / tool yang tidak tersedia langsung di sesi
+ *  restricted (hanya run_code yang langsung callable). */
+function adaptCommandText(name: string, text: string): string {
+  let out = text
+  out = out.replace(/Haiku agent/gi, 'cheap subagent')
+  out = out.replace(/Sonnet agents/gi, 'full subagents')
+  out = out.replace(/Sonnet agent/gi, 'full subagent')
+  out = out.replace(/gh bash command/gi, 'gh CLI via your shell (in presets where only the code/run tool is directly callable, run it inside that tool)')
+  out = out.replace(
+    /- Make a todo list first/,
+    '- Make a todo list first\n- Tools are toolset-agnostic: access files and gh via your shell/code-runner tool, and delegate parallel passes to subagents (each tool call needs its required fields, e.g. `description` for subagent calls)',
+  )
+  return name === 'code-review' ? out : text
+}
+
 /** Salin asset satu plugin ke bridge folder. */
 function mirrorPlugin(installPath: string, bridge: string): string[] {
   const copied: string[] = []
@@ -189,7 +209,7 @@ function mirrorPlugin(installPath: string, bridge: string): string[] {
           // grup nested: opsx/explore.md → opsx-explore.md (kebab, aman kedua parser)
           const dst = join(bridge, r.replace(/\.md$/, '') + '.md')
           const text = readFileSync(s, 'utf8')
-          writeFileSync(dst, ensureName(text, r.replace(/\.md$/, '')))
+          writeFileSync(dst, adaptCommandText(r.replace(/\.md$/, ''), ensureName(text, r.replace(/\.md$/, ''))))
           copied.push(dst)
         }
       }
