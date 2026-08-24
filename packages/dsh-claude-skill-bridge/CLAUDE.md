@@ -22,6 +22,27 @@ Source of truth versi aktif: `~/.claude/plugins/installed_plugins.json`
 `~/.claude/plugins/cache/<marketplace>/<plugin>/` (`.in_use` dulu, lalu
 semver tertinggi, lalu `unknown`).
 
+## Cara pakai ke depan (ringkas)
+
+- **Semuanya otomatis**: tiap boot dsh, plugin re-sync idempoten dari cache
+  plugin Claude Code + binary → muncul di katalog & menu `/` DSH. Tidak perlu
+  menjalankan apa pun.
+- **Tambahkan plugin Claude Code lain** (mis. pr-review-toolkit): edit
+  `~/.dsh/profiles/web/cordis.patch.yml` →
+  `- id: claude-skill-bridge` + `config: {mirror: ["superpowers@claude-plugins-official", "...", "pr-review-toolkit@claude-plugins-official"]}`
+  → restart dsh sekali → plugin-nya masuk bridge.
+- **Hapus/matikan satu plugin**: keluarkan dari daftar `mirror` → restart →
+  boot berikutnya entry-nya di-prune (file milik user sendiri tidak
+  tersentuh).
+- **Matikan seluruh bridge**: di patch profil `- {id: claude-skill-bridge, disabled: true}`
+  (dan hapus override `config` bila ada) → restart → plugin berhenti sync.
+  CATATAN: symlink yang sudah dibuat TIDAK ikut dibersihkan (prune hanya
+  berjalan saat plugin aktif) — untuk bersih total hapus manual
+  `~/.dsh/claude-bridge` + symlink di `~/.claude/skills` & `~/.claude/commands`
+  yang menunjuk ke sana.
+- **Aktif setelah perubahan config**: restart dsh sekali (skill `restart-dsh`);
+  perubahan file di `~/.dsh/claude-bridge` TANPA restart (watcher live).
+
 ## Arsitektur & seam
 
 ```
