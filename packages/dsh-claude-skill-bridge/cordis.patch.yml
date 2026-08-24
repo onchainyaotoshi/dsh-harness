@@ -1,0 +1,6 @@
+# Layer bundle dsh-claude-skill-bridge — diterapkan setelah semua bundle
+# sebelumnya. Host-only (TIDAK ada browser roster — plugin ini tidak punya UI;
+# kerjaannya sinkronisasi file saat boot lalu berhenti).
+- insert:
+    - id: claude-skill-bridge
+      name: dsh-claude-skill-bridge

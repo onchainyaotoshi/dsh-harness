@@ -1,0 +1,35 @@
+{
+  "name": "dsh-claude-skill-bridge",
+  "version": "0.1.0",
+  "description": "Bridge skill & command Claude Code (plugin cache + builtin binary) ke DSH: saat boot, mirror aset plugin-pilihan ke ~/.dsh/claude-bridge dan symlink ke user scope ~/.claude/skills|commands|agents sehingga muncul di menu '/' DSH. Host-only, tanpa UI.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/index.d.ts",
+    "cordis.patch.yml",
+    "CLAUDE.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "prepare": "tsdown"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "license": "MIT"
+}

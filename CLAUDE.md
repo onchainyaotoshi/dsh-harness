@@ -57,6 +57,13 @@ packages/
     src/index.ts          # host half: settings.register + apply live ke codeRuntime.config + 4 route API (termasuk POST /api/upgrade)
     src/client/index.tsx  # browser half: slot settings.section (order 26) — form tunable + tooltip + dialog upgrade
     cordis.patch.yml      # layer: - insert: [{id: custom-settings, name: dsh-custom-settings}]
+  dsh-claude-skill-bridge/ # bridge skill & command Claude Code (plugin cache + skill builtin binary) → DSH
+    src/index.ts          # host half HOST-ONLY (tanpa UI): saat boot — mirror plugin-pilihan ke
+                          #   ~/.dsh/claude-bridge/ (config `mirror`), ekstrak skill builtin binary
+                          #   (config `extract`), symlink ke ~/.claude/skills|commands|agents, prune yatim
+    cordis.patch.yml      # layer: - insert: [{id: claude-skill-bridge, name: dsh-claude-skill-bridge}]
+                          # CATATAN: customSkillDirs di row skill-filesystem di-DISABLE oleh dsh-web-app
+                          # di profil web — registrasi via user scope (verified 24 Aug 2026).
 ```
 
 Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
