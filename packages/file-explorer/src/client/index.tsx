@@ -46,6 +46,7 @@ interface WorkspaceInfo { id: string; title: string; path: string }
 interface FsEntry { name: string; type: 'file' | 'directory' | 'other'; size?: number; path: string }
 interface ListResponse { path: string; entries: FsEntry[] }
 interface ReadResponse { path: string; text: string }
+interface ActiveDirResponse { workdir: string | null }
 interface ApiError { error?: string; detail?: string }
 /** State viewer: teks ATAU preview gambar ATAU catatan (mis. file biner). */
 interface ViewerState { path: string; text?: string; imageUrl?: string; note?: string }
@@ -53,6 +54,8 @@ interface ViewerState { path: string; text?: string; imageUrl?: string; note?: s
 /** Mirror batas /raw di host: gambar lebih besar dilewati dengan catatan. */
 const MAX_RAW_BYTES = 8 * 1024 * 1024
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i
+/** Poll workdir sesi aktif (sinyal "agent lagi di mana"). */
+const FOLLOW_POLL_MS = 3000
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -76,6 +79,29 @@ function matchWorkspace(workspaces: WorkspaceInfo[], cwdPath: string): Workspace
   if (exact) return exact
   const lower = cwdPath.toLowerCase()
   return workspaces.find((w) => w.path.toLowerCase() === lower)
+}
+
+/** Path berada DI DALAM root (segment-aware: /a/b TIDAK di dalam /a/bc). */
+function isInsideDir(path: string, dir: string): boolean {
+  return path === dir || path.startsWith(dir + '/')
+}
+
+/**
+ * Workspace terdaftar yang root-nya MENGANDUNG path — terdalam bila root
+ * bertumpuk (mis. worktree linked di dalam repo utama). Untuk "ikut agent":
+ * workdir sesi boleh jadi SUBDIR workspace (bukan exact match).
+ */
+function deepestWorkspace(workspaces: WorkspaceInfo[], path: string): WorkspaceInfo | undefined {
+  let best: WorkspaceInfo | undefined
+  let bestLen = -1
+  for (const w of workspaces) {
+    const root = w.path.replace(/\/+$/, '')
+    if (isInsideDir(path, root) && root.length > bestLen) {
+      best = w
+      bestLen = root.length
+    }
+  }
+  return best
 }
 
 /* ---------- fallback stabil kalau service sessions absen ---------- */
@@ -179,6 +205,29 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
   const currentId = listSnapshot.current
   const currentCwd = currentId === undefined ? undefined : listSnapshot.byId?.[currentId]?.cwd
 
+  // Opsi A — ikuti workdir sesi aktif (agent): workdir bash terbaru BARU-BARU
+  // sesi, bukan cwd sesi (stempel saat dibuat, tidak pernah berubah walau
+  // agent kerja di worktree linked — lihat CLAUDE.md). Host expose route
+  // /active-dir; client cukup poll ringan selagi panel terbuka.
+  const [activeWorkdir, setActiveWorkdir] = useState<string | null>(null)
+  const lastFollowRef = useRef<string | null>(null)
+
+  // Sesi berganti → lupa follow lama.
+  useEffect(() => { lastFollowRef.current = null }, [currentId])
+
+  useEffect(() => {
+    if (currentId === undefined) { setActiveWorkdir(null); return }
+    let cancelled = false
+    const tick = () => {
+      getJson<ActiveDirResponse>(API + '/active-dir?session=' + encodeURIComponent(currentId))
+        .then((d) => { if (!cancelled) setActiveWorkdir(d.workdir) })
+        .catch(() => { /* degradasi: perilaku cwd tetap jalan */ })
+    }
+    tick()
+    const timer = setInterval(tick, FOLLOW_POLL_MS)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [currentId])
+
   useEffect(() => {
     getJson<WorkspaceInfo[]>(API + '/workspaces')
       .then((ws) => setWorkspaces(ws))
@@ -221,6 +270,31 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
   useEffect(() => {
     if (workspaceId && cwd) void load(workspaceId, cwd)
   }, [workspaceId, load])
+
+  // Navigasi ikuti agent: workdir di dalam workspace → buka tree di sana.
+  // Pindah workspace hanya kalau pengguna belum override manual (dropdown);
+  // memindah tree di dalam workspace yang sama tidak dianggap override.
+  // Penanda lastFollowRef mencegah perang dengan navigasi manual pengguna:
+  // re-follow hanya saat workdir BERUBAH (bukan tiap poll).
+  // PENTING: efek ini WAJIB SETELAH deklarasi `load` (useCallback) — deps
+  // array dievaluasi SAAT RENDER, akses `load` sebelum inisialisasi = TDZ
+  // "Cannot access 'load' before initialization" → slot padam (kejadian
+  // nyata 24 Aug 2026; deps dievaluasi di tempat useEffect dipanggil).
+  useEffect(() => {
+    if (activeWorkdir === null || activeWorkdir === lastFollowRef.current) return
+    lastFollowRef.current = activeWorkdir
+    const ws = deepestWorkspace(workspaces, activeWorkdir)
+    if (ws === undefined) return // di luar semua root — perilaku cwd tetap
+    if (ws.id !== workspaceId) {
+      if (manualRef.current) return // pilihan manual pengguna menang
+      // workspaceId + cwd di-set pada render yang sama → effect load
+      // bawaan [workspaceId] yang fetch; tanpa double-load race.
+      setWorkspaceId(ws.id)
+      setCwd(activeWorkdir)
+      return
+    }
+    if (activeWorkdir !== cwd) void load(workspaceId, activeWorkdir)
+  }, [activeWorkdir, workspaces, workspaceId, cwd, load])
 
   const openFile = useCallback(async (path: string, size?: number) => {
     try {

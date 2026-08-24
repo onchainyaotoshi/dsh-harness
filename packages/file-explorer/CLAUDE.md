@@ -15,11 +15,12 @@ cordis.patch.yml      # layer: - insert: [{ id: file-explorer, name: dsh-file-ex
 
 Satu row di `cordis.patch.yml` melayani host half DAN browser roster sekaligus.
 
-### Host half — 4 route exact di `ctx.webServer` (`/plugins/dsh-file-explorer/api/*`)
+### Host half — 5 route exact di `ctx.webServer` (`/plugins/dsh-file-explorer/api/*`)
 
 | Route | Fungsi | Batas |
 |---|---|---|
 | `GET /workspaces` | daftar workspace terdaftar | — |
+| `GET /active-dir` | workdir bash TERAKHIR satu sesi (sinyal "agent lagi di mana") | lookup map O(1); backfill 1× per sesi per boot |
 | `GET /list` | listing satu direktori | — |
 | `GET /read` | isi satu file teks | 512 KiB (`MAX_READ_BYTES`) |
 | `GET /raw` | preview biner (gambar) | 8 MiB (`MAX_RAW_BYTES`), Content-Type dari ekstensi (`MIME_BY_EXT`) |
@@ -39,8 +40,10 @@ filesystem.
 
 `webServer` (register route exact), `fs` (resolve/contains/listDir/stat/
 readText/readBytes), `workspaceRegistry`, `slots`, `layout`
-(openDetails/closeDetails), `sessions.list`. Diverifikasi di dsh 0.1.0-rc.6 —
-kalau dsh di-upgrade, cek ulang seam-nya dulu.
+(openDetails/closeDetails), `sessions.list`, event `session/event` + service
+opsional `sessionQuery` (via `ctx.get`, pola defensif dsh-git-state).
+Diverifikasi di dsh 0.1.0-rc.6 — kalau dsh di-upgrade, cek ulang seam-nya
+dulu.
 
 Tombol launcher ditaruh di slot `conversation.session.header.utilities`
 (kind list, scope sesi) dengan `order: 1` — occupant bawaan
@@ -78,6 +81,32 @@ pemilik saat pindah dari `sidebar.footer.action` (scope root).
   `workspace.path` (registri host) di sisi client → auto-select workspace
   aktif, override manual bertahan sampai sesi berganti. Kalau dsh di-upgrade,
   cek ulang bentuk SessionListState ini dulu.
+- **Cwd sesi ≠ direktori kerja agent — worktree linked butuh sinyal workdir**
+  (pelajaran 24 Aug 2026, kasus nyata sesi "bikin worktree" di camis):
+  `sessions.list.byId[id].cwd` di-stempel SAAT SESI DIBUAT dan tidak pernah
+  berubah, walau agent kerja di dalam git worktree linked
+  (`/home/<repo>/.claude/worktrees/feat/...` — yang ada DI DALAM root repo).
+  `git worktree add` + `cd` di bash = workdir PER-PANGGILAN TOOL, bukan cwd
+  sesi. Sinyal "agent lagi di mana" = event stream `session/event` →
+  `tool/code-dispatch-start` → `data.arguments.workdir` (pola sama
+  dsh-git-state). Implementasi: host index workdir terakhir per sesi
+  (Map bounded 64, tulis ulang; 0 readSession utk sesi lain) + backfill 1×
+  per sesi per boot via `ctx.get('sessionQuery').readSession(id)` (scan
+  event TERAKHIR ke depan, dedup in-flight + tanda backfilled; tanpanya sesi
+  idle pra-restart tidak pernah terdorong) + route `GET /active-dir` (murah,
+  dipoll 3 dtk selagi panel terbuka). Client: `deepestWorkspace()` (mengandung
+  workdir, segment-aware — bukan exact match kayak auto-select cwd); pindah
+  workspace hanya kalau `!manualRef`; penanda `lastFollowRef` mencegah
+  "perang navigasi" — re-follow hanya saat workdir BERUBAH, bukan tiap poll
+  (kalau tidak, navigasi manual pengguna langsung ditimpa 3 dtk kemudian).
+  Workdir di luar semua workspace → perilaku cwd tetap (batas containment).
+- **Deps array useEffect diakses SAAT RENDER — JANGAN referensikan
+  useCallback yang dideklarasikan DI BAWAHNYA** (kejadian nyata 24 Aug 2026,
+  "Cannot access 'load' before initialization"): efek follow menaruh `load`
+  di deps array padahal `const load = useCallback(...)` ada di bawahnya →
+  TDZ, SELURUH slot `details` padam (bukan cuma komponen gagal — "slot entry
+  crashed"). Gejala di browser: panel tidak muncul sama sekali; console:
+  ReferenceError. Fix: pindahkan efek ke SETELAH deklarasi callback-nya.
 - **Petakan error `FsError.code` di route HTTP, jangan andalkan bentuk sendiri**
   (pelajaran 15 Aug 2026): klik file biner (gambar) → `ctx.fs.readText`
   melempar FsError `FS_NOT_TEXT` ("binary file") → tanpa pemetaan jadi 500

@@ -8,6 +8,11 @@ gambar kecil), di kolom kanan (seat `details`).
 
 - Tree direktori workspace aktif — auto-select mengikuti sesi; override manual
   bertahan sampai sesi berganti.
+- **Mengikuti direktori kerja agent** (workdir panggilan bash terbaru sesi).
+  Jadi kalau agent bekerja di dalam git worktree linked
+  (`/home/<repo>/.claude/worktrees/...`), panel ikut buka tree di situ —
+  bukan cuma root checkout utama tempat sesi dibuat. Workdir di luar semua
+  workspace terdaftar → panel tetap di perilaku cwd (batas containment).
 - Viewer source code dengan theme tokens `--dsw-*` (ikut light/dark).
 - Preview gambar kecil lewat route `raw` (Content-Type dari ekstensi).
 
