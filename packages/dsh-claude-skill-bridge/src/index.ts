@@ -184,6 +184,45 @@ function adaptCommandText(name: string, text: string): string {
   return name === 'code-review' ? out : text
 }
 
+/* ------------------------------------------------------------------ */
+/* Adaptasi skill builtin: aturan notranslate                           */
+/* ------------------------------------------------------------------ */
+
+/** Skill yang salinan bridge-nya wajib membawa aturan notranslate.
+ *  Perluas cakupan = tambah satu nama di sini. */
+const NOTRANSLATE_SKILLS = new Set(['artifact-design', 'artifact-diagramming'])
+
+/** Marker idempotensi — dipakai adaptSkillText agar blok tidak dobel. */
+const NOTRANSLATE_MARKER = 'dsh-bridge:notranslate'
+
+/** Blok aturan yang disuntikkan ke ujung SKILL.md salinan bridge. */
+const NOTRANSLATE_BLOCK = `## Never-translate meta — mandatory
+
+<!-- dsh-bridge:notranslate -->
+
+Every published HTML artifact MUST include this tag inside \`<head>\`:
+
+\`\`\`html
+<meta name="google" content="notranslate">
+\`\`\`
+
+and MUST set \`translate="no"\` on the opening \`<html>\` tag. These pages are
+typographic and diagrammatic work: browser auto-translate rewrites headings,
+labels, and inline-SVG \`<text>\`, breaking layout and meaning. Never publish an
+artifact without it — the reader must never have to click "Never translate
+this site" by hand.
+`
+
+/** Suntik aturan notranslate ke salinan bridge skill tertentu (idempoten via
+ *  marker). Binary/cache asli tidak pernah berubah — hanya SKILL.md di
+ *  bridge folder, pola adaptCommandText. Wajib lewat kode: edit manual di
+ *  bridge folder ditimpa fase ekstraksi (hash-compare) saat boot. */
+function adaptSkillText(name: string, text: string): string {
+  if (!NOTRANSLATE_SKILLS.has(name)) return text
+  if (text.includes(NOTRANSLATE_MARKER)) return text
+  return text.replace(/\s*$/, '') + '\n' + NOTRANSLATE_BLOCK
+}
+
 /** Salin asset satu plugin ke bridge folder. */
 function mirrorPlugin(installPath: string, bridge: string): string[] {
   const copied: string[] = []
@@ -271,28 +310,40 @@ function decodeJsEscapes(text: string): string {
 }
 
 /** Ekstrak konten skill `skillName` dari binary (template literal: backtick
- *  penutup yang TIDAK di-escape). Mengembalikan teks SKILL.md utuh atau undefined. */
+ *  penutup yang TIDAK di-escape). Semua kemunculan `name:<skill>` diprobe,
+ *  kandidat valid TERPANJANG yang menang — salinan tabel biner bisa
+ *  menghasilkan fragmen pendek yang lolos validasi awal. */
 function extractFromBinary(data: Buffer, skillName: string): string | undefined {
   const marker = Buffer.from(`name: ${skillName}\n`)
-  const at = data.indexOf(marker)
-  if (at < 0) return undefined
-  let start = data.lastIndexOf(Buffer.from('---'), Math.max(0, at - 300))
-  if (start < 0 || !data.subarray(start, start + 4).equals(Buffer.from('---\n'))) return undefined
-  let i = start
-  while (i < data.length) {
-    if (data[i] === 0x60) {
-      let backslashes = 0
-      for (let j = i - 1; j >= 0 && data[j] === 0x5c; j--) backslashes++
-      if (backslashes % 2 === 0) {
-        const body = data.subarray(start, i).toString('utf8')
-        const decoded = decodeJsEscapes(body)
-        if (decoded.startsWith('---') && decoded.includes(`name: ${skillName}`)) return decoded
-        return undefined
+  const fence = Buffer.from('---\n')
+  let best: string | undefined
+  let from = 0
+  for (;;) {
+    const at = data.indexOf(marker, from)
+    if (at < 0) break
+    from = at + 1
+    // Fence pembuka: `---\n` TERAKHIR sebelum marker, wajib ≤300 byte di
+    // depannya (dulu lastIndexOf('---', at-300) — hanya menemukan posisi
+    // ≤ at-300, fence yang menempel di depan tak pernah ketemu; incident 25 Aug).
+    const start = data.lastIndexOf(fence, at)
+    if (start < 0 || at - start > 300) continue
+    let i = start
+    while (i < data.length) {
+      if (data[i] === 0x60) {
+        let backslashes = 0
+        for (let j = i - 1; j >= 0 && data[j] === 0x5c; j--) backslashes++
+        if (backslashes % 2 === 0) {
+          const decoded = decodeJsEscapes(data.subarray(start, i).toString('utf8'))
+          if (decoded.startsWith('---') && decoded.includes(`name: ${skillName}`)) {
+            if (best === undefined || decoded.length > best.length) best = decoded
+          }
+          break
+        }
       }
+      i++
     }
-    i++
   }
-  return undefined
+  return best
 }
 
 function extractBuiltin(skillName: string, bridge: string, log: (m: string) => void): boolean {
@@ -303,11 +354,14 @@ function extractBuiltin(skillName: string, bridge: string, log: (m: string) => v
   }
   try {
     const data = readFileSync(binary)
-    const body = extractFromBinary(data, skillName)
-    if (body === undefined) {
+    const raw = extractFromBinary(data, skillName)
+    if (raw === undefined) {
       log(`extract ${skillName}: pola tidak ditemukan di ${binary} — skip`)
       return false
     }
+    // Adaptasi salinan bridge (notranslate) SEBELUM compare/write — sehingga
+    // boot berikutnya hash-compare cocok dan tidak menimpa ulang.
+    const body = adaptSkillText(skillName, raw)
     const out = join(bridge, skillName, 'SKILL.md')
     if (!existsSync(out) || readFileSync(out, 'utf8') !== body) {
       mkdirSync(dirname(out), { recursive: true })

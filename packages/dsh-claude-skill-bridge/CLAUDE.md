@@ -60,7 +60,9 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
   size+mtime sama; hapus ekstra) + command flat diberi `name:` frontmatter
   (`ensureName`); (2) ekstrak builtin dari binary: cari
   `---\nname:<skill>` lalu backtick PENUTUP yang tidak di-escape, decode
-  `\uXXXX`/`\``; (3) symlink entry bridge → user scope (relatif, pola
+  `\uXXXX`/`\``, lalu `adaptSkillText` menyuntik blok notranslate untuk skill
+  di `NOTRANSLATE_SKILLS` (marker `dsh-bridge:notranslate`, idempoten)
+  SEBELUM compare/write; (3) symlink entry bridge → user scope (relatif, pola
   ast-grep); (4) prune symlink yatim yang resolve-nya DI DALAM bridge folder.
 - **Tidak menyentuh registry skill** — tidak ada `ctx.skills`; tidak ada
   service; `inject: []`. Write-only filesystem + symlink.
@@ -115,6 +117,28 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
   sumber cache tidak lebih baru. Kalau perubahan harus permanen & idempoten,
   masukkan ke logika plugin (adaptCommandText adalah contohnya — satu sumber
   di repo), bukan edit-edit manual.
+- **Auto-translate browser merusak artifact → suntikkan aturan notranslate lewat
+  kode, bukan edit manual** (incident 25 Aug 2026): skill `artifact-*` hasil
+  ekstrak binary tidak mengatur meta anti-translate; HTML artifact yang dibuat
+  agent ditawari auto-translate oleh browser — label, heading, dan teks SVG
+  ke-mangle, user harus klik "Never translate this site" manual. Edit manual
+  SKILL.md di bridge folder PASTI hilang (fase ekstraksi hash-compare menimpa
+  dengan raw binary saat boot). Solusi: `adaptSkillText` — satu sumber di repo,
+  disisipkan setelah ekstraksi sebelum compare/write, marker HTML
+  `dsh-bridge:notranslate` buat idempoten; hanya salinan bridge yang berubah,
+  binary tetap asli (precedent `adaptCommandText`). Perluas ke skill lain =
+  tambah satu nama di `NOTRANSLATE_SKILLS`.
+- **Upgrade binary Claude Code bisa merusak pola ekstraksi — cek tiap upgrade**
+  (incident 25 Aug 2026): binary 2.1.245 gagal diekstrak ("pola tidak
+  ditemukan") karena `lastIndexOf('---', at-300)` hanya menemukan posisi
+  ≤ at−300 — fence `---\n` yang menempel langsung di depan `name:<skill>`
+  TIDAK PERNAH ketemu; di binary lama kebetulan ada `---` lain ≥300 byte
+  sebelum marker, jadi sempat jalan tanpa terlihat salah. Perbaikan: cari
+  `---\n` TERAKHIR dari posisi marker (wajib ≤300 byte di depannya) + loop
+  SEMUA kemunculan marker dan pilih kandidat valid terpanjang (salinan tabel
+  biner di tengah binary bisa menghasilkan fragmen pendek yang lolos
+  validasi `startsWith('---')`). Gejala khas saat rusak: log "pola tidak
+  ditemukan" tiap boot sementara salinan lama tetap tersaji — stale diam-diam.
 - **`.optional()` TIDAK ADA di schemastery — jangan tulis gaya zod** (incident
   24 Aug 2026): `bridgeDir: z.string().optional()` membuat import plugin GAGAL
   saat boot -> `plugin tree failed to load` -> dsh crash-loop -> website 502.
