@@ -66,7 +66,7 @@ interface CodeRuntimeLike {
  * Diverifikasi langsung di @deepseek-ai/cordis terpasang (micro-test:
  * provide/get dua urutan boot + mutasi in-place terbaca).
  */
-interface CustomSettingsApplied {
+export interface CustomSettingsApplied {
   gitState?: { cmdTimeoutMs?: number }
 }
 
@@ -129,6 +129,14 @@ export const TUNABLES: Tunable[] = [
     restart: false,
     consumer: 'browser',
     apply() { /* no-op: konsumennya browser half plugin lain */ },
+    // Nilai ter-apply = resolved namespace (sudah terisi default via schema);
+    // dibaca dari provider settings supaya GET /api/status menampilkannya dan
+    // badge "Aktif" di tab Custom Settings berfungsi (ditambahkan 25 Aug 2026).
+    readApplied(ctx) {
+      const settings = (ctx as unknown as { get<T>(key: string): T | undefined })
+        .get<{ get?(ns: string): Record<string, number> | undefined }>('settings')
+      return settings?.get?.('custom-settings')?.gitStatePollMs
+    },
   },
   {
     // Konsumen: HOST half dsh-git-state — baca lazy per-request dari objek
@@ -163,7 +171,12 @@ export const TUNABLES: Tunable[] = [
       if (shared?.gitState) shared.gitState.cmdTimeoutMs = Math.round(value)
     },
     readApplied(ctx) {
-      return sharedApplied(ctx)?.gitState?.cmdTimeoutMs
+      // Sumber otoritatif = resolved namespace (bukan objek bersama): nilai
+      // di sini tidak bergantung urutan apply boot (pelajaran 25 Aug 2026 —
+      // status menampilkan 6000 setelah restart padahal dokumen berisi 300000).
+      const settings = (ctx as unknown as { get<T>(key: string): T | undefined })
+        .get<{ get?(ns: string): Record<string, number> | undefined }>('settings')
+      return settings?.get?.('custom-settings')?.gitStateCmdTimeoutMs
     },
   },
 ]

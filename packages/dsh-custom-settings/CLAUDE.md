@@ -64,7 +64,10 @@ cordis.patch.yml       # - insert: [{id: custom-settings, name: dsh-custom-setti
   in-place terbaca) SEBELUM dipakai — seam baru wajib diverifikasi dulu.
 - **Route API** (`ctx.webServer`, pola file-explorer, `kind: 'exact'`):
   `GET /tunables`, `GET /status` (`{applied, installedVersion,
-  lastRestartFailed}`), `GET /version`, `POST /upgrade`.
+  lastRestartFailed}`), `GET /version`, `POST /upgrade`, `POST /save`
+  (path tulis SATU-SATUNYA dari browser; lihat lesson 25 Aug 2026 di bawah;
+  konteks face `settings.mutate(ns, ops, expectedRevision?)` dari provider +
+  `settings.get(ns)` utk readApplied konsumen browser).
 - **Versi terpasang**: derivasi layout npm-global dari `process.execPath`
   (`<node>/../lib/node_modules/@deepseek-ai/dsh/package.json`) — `createRequire(process.argv[1])`
   GAGAL karena argv[1] = symlink bin (diverifikasi). Fallback
@@ -152,6 +155,31 @@ cordis.patch.yml       # - insert: [{id: custom-settings, name: dsh-custom-setti
   ctx ternyata TIDAK throw di cordis terpasang, tetap pakai `provide()`
   karena idiomatik + terlacak; JANGAN ganti referensi objek bersama saat
   apply (konsumen yang membaca lazy bisa kehilangan perubahan).
+- **JANGAN seed `drafts` form tunable dengan default saat mount** (25 Aug
+  2026, laporan pemilik "nilai gak persist padahal notif Tersimpan"): draftOf
+  memprioritaskan draft, jadi input SELALU menampilkan default setelah
+  refresh — padahal nilai tersimpan tetap ada di settings.yaml. Gejala khas:
+  input 30000/6000 padahal dokumen berisi 300000/300000. Fix: draft hanya
+  diisi saat pengguna mengetik/memilih preset; fallback draftOf = draft →
+  resolved (scopeSnapshot) → default deskriptor.
+- **`settingsScope.set/unset` di dsh-client-ui-settings 0.1.1-rc.2
+  MENELAN kegagalan** (25 Aug 2026): `SettingsScopeController.write`
+  meng-catch semua error DAN respons non-ok (settings-conflict dgn revision
+  basi dari tab lain, settings-rejected) → `recover()` (reload mirror) →
+  resolve biasa → `await scope.set()` SELALU sukses → UI "✓ Tersimpan" palsu.
+  DIVERIFIKASI live: bump revision eksternal (tab lain) → Simpan dari tab
+  dengan mirror basi → notif "✓ Tersimpan" + "✓ Aktif: 1 jam", dokumen TIDAK
+  berubah, revision tetap. Ini penyebab hilangnya gitStateCmdTimeoutMs
+  pemilik. Fix: path tulis SATU-SATUNYA adalah `POST /api/save` milik host
+  (provider `settings.mutate` tanpa revision fence — dibaca fresh
+  server-side, dan menulis per-field sehingga tidak menimpa field lain);
+  client menampilkan error nyata dari route. `settingsScope` kini hanya untuk
+  BACA (mirror describe).
+- **`settings.mutate(ns, ops, expectedRevision?)` ada di provider**
+  (0.1.1-rc.2), tapi TIDAK ada di scope hasil `register` (hanya
+  get/watch/update/replace) — unset per-field via provider, bukan scope.
+  `settings.get(ns)` = resolved satu namespace (default terisi) — sumber
+  readApplied konsumen browser (gitStatePollMs) supaya badge "Aktif" muncul.
 
 ## Verifikasi
 

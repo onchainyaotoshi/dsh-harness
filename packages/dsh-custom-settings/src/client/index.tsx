@@ -126,6 +126,13 @@ const InfoIcon = (): ReactElement => (
 
 /* ================= komponen utama ================= */
 
+interface SaveResponse {
+  ok?: boolean
+  error?: string
+  detail?: string
+  applied?: Record<string, number>
+}
+
 function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
   const { scope } = props
   // WAJIB bungkus arrow: method SettingsScopeController pakai `this.store` —
@@ -140,6 +147,7 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
   const [tunablesError, setTunablesError] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [saveState, setSaveState] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({})
+  const [saveError, setSaveError] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<StatusResponse | null>(null)
   const [version, setVersion] = useState<VersionResponse | null>(null)
   const [versionBusy, setVersionBusy] = useState(false)
@@ -156,9 +164,10 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
       .then((data: Tunable[]) => {
         if (!alive) return
         setTunables(data)
-        const init: Record<string, string> = {}
-        for (const t of data) init[t.id] = String(t.default)
-        setDrafts((prev) => ({ ...init, ...prev }))
+        // JANGAN seed drafts dengan default (pelajaran 25 Aug 2026): draftOf
+        // memprioritaskan draft, sehingga input SELALU menampilkan default,
+        // bukan nilai tersimpan, setelah refresh — persisten terlihat "hilang".
+        // Draft hanya diisi saat pengguna mengetik/memilih preset.
       })
       .catch(() => { if (alive) setTunablesError(true) })
     return () => { alive = false }
@@ -204,13 +213,30 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
     setDrafts((prev) => ({ ...prev, [t.id]: String(value) }))
     setSaveState((prev) => ({ ...prev, [t.id]: 'saving' }))
     try {
-      await scope.set(t.id, value)
+      // Tulis lewat route HOST sendiri, BUKAN scope.set: kontroler
+      // settingsScope dsh-client-ui-settings 0.1.1 MENELAN respons non-ok
+      // (konflik revision dari tab lain, rejected) dan resolve biasa →
+      // notif "Tersimpan" palsu (kejadian nyata 25 Aug 2026). Route ini
+      // mengembalikan hasil nyata + nilai ter-apply terbaru.
+      const res = await fetch(`${API}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: t.id, value }),
+      })
+      const body = (await res.json()) as SaveResponse
+      if (!res.ok || body.ok !== true) {
+        throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`)
+      }
+      if (body.applied) {
+        setStatus((prev) => (prev ? { ...prev, applied: body.applied! } : prev))
+      }
       setSaveState((prev) => ({ ...prev, [t.id]: 'saved' }))
       refreshStatus()
       window.setTimeout(() => {
         setSaveState((prev) => (prev[t.id] === 'saved' ? { ...prev, [t.id]: 'idle' } : prev))
       }, 2500)
-    } catch {
+    } catch (e) {
+      setSaveError((prev) => ({ ...prev, [t.id]: e instanceof Error ? e.message : 'Gagal menyimpan.' }))
       setSaveState((prev) => ({ ...prev, [t.id]: 'error' }))
     }
   }
@@ -219,10 +245,25 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
     setDrafts((prev) => ({ ...prev, [t.id]: String(t.default) }))
     setSaveState((prev) => ({ ...prev, [t.id]: 'saving' }))
     try {
-      await scope.unset(t.id)
+      const res = await fetch(`${API}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: t.id, reset: true }),
+      })
+      const body = (await res.json()) as SaveResponse
+      if (!res.ok || body.ok !== true) {
+        throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`)
+      }
+      if (body.applied) {
+        setStatus((prev) => (prev ? { ...prev, applied: body.applied! } : prev))
+      }
       setSaveState((prev) => ({ ...prev, [t.id]: 'saved' }))
       refreshStatus()
-    } catch {
+      window.setTimeout(() => {
+        setSaveState((prev) => (prev[t.id] === 'saved' ? { ...prev, [t.id]: 'idle' } : prev))
+      }, 2500)
+    } catch (e) {
+      setSaveError((prev) => ({ ...prev, [t.id]: e instanceof Error ? e.message : 'Gagal menyimpan.' }))
       setSaveState((prev) => ({ ...prev, [t.id]: 'error' }))
     }
   }
@@ -351,7 +392,7 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
               ) : (
                 <span className="dscs-hint">codeRuntime tidak tersedia — belum diterapkan.</span>
               )}
-              {saveState[t.id] === 'error' && <p className="dscs-error">Gagal menyimpan.</p>}
+              {saveState[t.id] === 'error' && <p className="dscs-error">Gagal menyimpan: {saveError[t.id] ?? 'kesalahan tidak diketahui'}.</p>}
             </div>
           </div>
         )

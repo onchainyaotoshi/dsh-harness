@@ -27,7 +27,7 @@ import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
-import { TUNABLES } from './tunables'
+import { TUNABLES, type CustomSettingsApplied } from './tunables'
 
 export const name = 'custom-settings-host'
 export const inject = ['settings', 'webServer']
@@ -50,6 +50,10 @@ interface SettingsScope {
 }
 interface SettingsFace {
   register(ns: string, schema: unknown, options?: unknown): SettingsScope
+  /** Path-addressed edit tanpa revision fence (dibaca fresh dari dokumen). */
+  mutate(ns: string, ops: Array<{ op: 'set' | 'unset'; path: string[]; value?: unknown }>, expectedRevision?: number): Promise<unknown>
+  /** Resolved value satu namespace (sudah di-resolve schema: default terisi). */
+  get?(ns: string): Record<string, unknown> | undefined
 }
 interface WebServerRoute {
   kind: 'exact'
@@ -88,6 +92,28 @@ function sendError(res: ServerResponse, err: unknown): void {
     return
   }
   sendJson(res, 500, { error: 'internal-error' })
+}
+
+/** Baca body JSON kecil; reject saat parses gagal atau melebihi kapasitas. */
+function readBodyJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.on('data', (chunk: string | Buffer) => {
+      body += String(chunk)
+      if (body.length > 64 * 1024) {
+        reject(new Error('request body too large'))
+        req.destroy()
+      }
+    })
+    req.on('end', () => {
+      try {
+        resolve(body === '' ? {} : JSON.parse(body) as unknown)
+      } catch (err) {
+        reject(err)
+      }
+    })
+    req.on('error', reject)
+  })
 }
 
 /** Versi dsh terpasang: derivasi layout npm-global dari process.execPath (deterministik di deployment ini), fallback createRequire. */
@@ -205,8 +231,7 @@ export function apply(ctx: Context): void {
   // Service cordis 'customSettingsApplied': konsumen (dsh-git-state host)
   // membaca via ctx.get per-request — aman untuk urutan boot dua arah, dan
   // perubahan nilai live karena apply() tunable memutasi objek IN-PLACE.
-  const defaultOf = (id: string): number => TUNABLES.find((t) => t.id === id)?.default ?? 0
-  const appliedShared = { gitState: { cmdTimeoutMs: defaultOf('gitStateCmdTimeoutMs') } }
+  const appliedShared: CustomSettingsApplied = { gitState: {} }
   const provide = (ctx as unknown as ProvideFace).provide.bind(ctx)
   ctx.effect(() => provide('customSettingsApplied', appliedShared))
 
@@ -216,6 +241,15 @@ export function apply(ctx: Context): void {
     fields[t.id] = z.number().min(t.min).max(t.max).default(t.default)
   }
   const scope = settings.register(NS, z.object(fields))
+
+  // Seed objek bersama dari resolved namespace, BUKAN dari defaultOf:
+  // seeding berbasis urutan apply pernah terobservasi tertinggal saat boot
+  // (pelajaran 25 Aug 2026 — status 6000 setelah restart padahal dokumen
+  // berisi 300000, sampai perubahan nilai pertama memicu re-apply).
+  const resolvedNow = (scope.get() as Record<string, unknown> | undefined)?.['gitStateCmdTimeoutMs']
+  if (typeof resolvedNow === 'number' && Number.isFinite(resolvedNow)) {
+    appliedShared.gitState!.cmdTimeoutMs = Math.round(resolvedNow)
+  }
 
   const applyAll = (): void => {
     const value = scope.get()
@@ -273,6 +307,47 @@ export function apply(ctx: Context): void {
         restart: t.restart === true,
         consumer: t.consumer === 'browser' ? 'browser' : 'host',
       })))
+    },
+  }))
+
+  /* ---- POST /api/save (path tulis SATU-SATUNYA dari browser) ---- */
+  // Mengapa tidak pakai settingsScope.set dari dsh-client-ui-settings 0.1.1:
+  // kontroler client meng-SWALLOW respons non-ok (settings-conflict dengan
+  // revision basi dari tab lain, settings-rejected) lalu resolve biasa —
+  // UI menampilkan "Tersimpan" padahal nilai tidak pernah ditulis (kejadian
+  // nyata 25 Aug 2026, kehilangan gitStateCmdTimeoutMs). Route ini menulis
+  // TANPA revision fence (mutate di-drive dari dokumen fresh server-side),
+  // nilai per-field — tidak menimpa field lain — dan mengembalikan hasil
+  // nyata + nilai ter-apply terbaru.
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
+    path: API_PREFIX + '/save',
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      try {
+        const body = (await readBodyJson(req)) as { id?: unknown; value?: unknown; reset?: unknown }
+        const id = typeof body?.id === 'string' ? body.id : ''
+        const tunable = TUNABLES.find((t) => t.id === id)
+        if (!tunable) {
+          sendJson(res, 400, { ok: false, error: 'unknown-tunable', detail: id })
+          return
+        }
+        if (body?.reset === true) {
+          await settings.mutate(NS, [{ op: 'unset', path: [id] }])
+          sendJson(res, 200, { ok: true, applied: appliedValues() })
+          return
+        }
+        const raw = Number(body?.value)
+        if (!Number.isFinite(raw)) {
+          sendJson(res, 400, { ok: false, error: 'invalid-value', detail: String(body?.value) })
+          return
+        }
+        const value = Math.min(tunable.max, Math.max(tunable.min, Math.round(raw)))
+        await settings.mutate(NS, [{ op: 'set', path: [id], value }])
+        sendJson(res, 200, { ok: true, applied: appliedValues() })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        sendJson(res, 400, { ok: false, error: 'save-failed', detail: msg })
+      }
     },
   }))
 
