@@ -137,33 +137,35 @@ pemilik saat pindah dari `sidebar.footer.action` (scope root).
   register dengan `priority: -1` — slot `single` MENOLAK register di priority
   yang sama dengan occupant (throw "already has a registration at priority 0",
   kejadian nyata 18 Aug 2026); yang menang = nilai priority TERENDAH (lowest
-  renders). Panggil `openDetails` di useEffect occupant (scope sesi), BUKAN di
-  apply — `layout` bisa belum "wired" sebelum root entry mount (error
-  "layout: panel actions not wired"); bungkus try/catch. Verifikasi occupancy
-  lewat Inspect provider (Slots.listSubTree root "details").
-- **Seat scope-sesi REMOUNT tiap pindah sesi — auto-open WAJIB hormati pref
-  pengguna** (kejadian nyata 25 Aug 2026): seat `details` ber-scope session →
-  entry baru per sesi, mount effect jalan lagi di setiap klik sesi di sidebar.
-  Tanpa ingatan persisten, `openDetails()` di mount selalu menimpa keputusan
-  pengguna yang sengaja menutup panel (keluhan pemilik). Fix: pref
-  buka/tutup di localStorage (`dsh-file-explorer.details`,
-  helper `readPanelPref`/`writePanelPref`); mount effect skip bila `'closed'`;
-  default tanpa pref = tetap auto-open (paritas perilaku lama).
-- **`ctx.layout` write-only — status buka/tutup dibaca dari DOM, dan tulis
-  pref di SATU jalur** (25 Aug 2026): face `layout` hanya punya
-  openDetails/closeDetails (bundle ui-layout 0.1.1-rc.1); state asli = width px
-  di store root (0 = tutup) dan TIDAK terekspos ke plugin. Toggle tombol Files
-  membaca truth dari DOM: konten details tetap ter-mount walau kolom 0px
-  (AppFrame selalu merender slot), jadi `.dshfe-panel`.clientWidth > 0 =
-  benar-benar terlihat. JANGAN bikin state mirror sendiri — ui-layout
-  me-CLOSE details OTOMATIS tiap pindah sesi (useLayoutEffect AppFrame) di
-  luar kendali plugin. Dua jebakan terkait: (1) baca DOM/layout SYNC setelah
-  dispatch menghasilkan nilai STALE (commit React async) — tunggu frame
-  berikutnya sebelum asertif; (2) tulis pref wajib di SATU tempat
-  (openPanel/closePanel di apply) — semula toggle menutup panel tapi pref tak
-  tertulis karena jalur close tak menulis → pindah sesi langsung auto-open
-  lagi (bug nyata saat verifikasi browser). Auto-close AppFrame TIDAK lewat
-  jalur ini → pref tak tersentuh, by design.
+  renders). (Dulu disarankan memanggil `openDetails` di useEffect occupant —
+  ATURAN ITU SUDAH DICABUT 25 Aug 2026, lihat lesson "JANGAN hidupkan lagi
+  auto-open".) Tetap valid: akses layout hanya dari dalam komponen/effect,
+  BUKAN di apply — `layout` bisa belum "wired" sebelum root entry mount
+  (error "layout: panel actions not wired"); bungkus try/catch. Verifikasi
+  occupancy lewat Inspect provider (Slots.listSubTree root "details").
+- **Seat scope-sesi REMOUNT tiap pindah sesi — JANGAN hidupkan lagi
+  auto-open** (keputusan pemilik 25 Aug 2026): seat `details` ber-scope
+  session → entry baru per sesi, efek mount jalan lagi di setiap klik sesi.
+  Versi awal plugin memanggil `openDetails()` di mount → tutup-manual
+  pemilik selalu ditimpa tiap pindah sesi (keluhan nyata). Dua iterasi fix
+  dalam satu hari: (1) guard pref localStorage — DIBUANG juga karena pemilik
+  memutuskan lebih tegas: **panel selalu mulai tertutup, di browser siapa
+  pun, tanpa kecuali; satu-satunya pemicu buka = klik tombol Files
+  (toggle)**. Pref dibuang total (tanpa pembaca = dead code). Kalau suatu
+  saat diminta persisten lagi, ingat: tulis pref di SATU jalur
+  (openPanel/closePanel) — jalur close yang lupa menulis pernah bikin
+  panel auto-open lagi tiap pindah sesi.
+- **`ctx.layout` itu write-only — status buka/tutup dibaca dari DOM**
+  (25 Aug 2026): face `layout` hanya punya openDetails/closeDetails (bundle
+  ui-layout 0.1.1-rc.1); state asli = width px di store root (0 = tutup)
+  dan TIDAK terekspos ke plugin. Toggle tombol Files membaca truth dari
+  DOM: konten details tetap ter-mount walau kolom 0px (AppFrame selalu
+  merender slot), jadi `.dshfe-panel`.clientWidth > 0 = benar-benar
+  terlihat. JANGAN bikin state mirror sendiri — ui-layout me-CLOSE details
+  OTOMATIS tiap pindah sesi (useLayoutEffect AppFrame) di luar kendali
+  plugin. Jebakan pengujian: baca DOM/layout SYNC setelah dispatch
+  menghasilkan nilai STALE (commit React async) — tunggu frame berikutnya
+  sebelum menyimpulkan.
 
 ## Verifikasi
 

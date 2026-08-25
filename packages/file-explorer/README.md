@@ -9,8 +9,9 @@ gambar kecil), di kolom kanan (seat `details`).
 - Tree direktori workspace aktif — auto-select mengikuti sesi; override manual
   bertahan sampai sesi berganti.
 - Tombol folder di kanan atas header sesi berfungsi **toggle**: klik membuka
-  panel, klik lagi menutupnya. Panel yang sengaja ditutup tidak dibuka paksa
-  lagi saat pindah sesi atau reload halaman (preferensi tersimpan per browser).
+  panel, klik lagi menutupnya. Panel **selalu mulai dalam keadaan tertutup** —
+  setiap ganti sesi atau muat ulang halaman, dan tidak pernah dibukakan
+  otomatis (keputusan pemilik).
 - Viewer source code dengan theme tokens `--dsw-*` (ikut light/dark).
 - Preview gambar kecil lewat route `raw` (Content-Type dari ekstensi).
 

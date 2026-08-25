@@ -72,27 +72,6 @@ function parentOf(path: string): string {
   return idx <= 0 ? '/' : path.slice(0, idx)
 }
 
-/* ---------- preferensi buka/tutup panel (persisten per browser) ---------- */
-/**
- * Seat `details` ber-scope SESI → komponen panel remount setiap pindah sesi.
- * Tanpa ingatan persisten, auto-open di mount selalu menimpa keputusan
- * pengguna yang sengaja menutup panel (keluhan nyata 25 Aug 2026). Pref ini
- * HANYA ditulis oleh aksi sadar pengguna: tombol close panel → 'closed',
- * tombol Files di header → 'open'. Tanpa pref (browser baru) → auto-open,
- * paritas dengan perilaku lama.
- */
-const PANEL_PREF_KEY = 'dsh-file-explorer.details'
-type PanelPref = 'open' | 'closed'
-function readPanelPref(): PanelPref | null {
-  try {
-    const v = window.localStorage.getItem(PANEL_PREF_KEY)
-    return v === 'open' || v === 'closed' ? v : null
-  } catch { return null }
-}
-function writePanelPref(pref: PanelPref): void {
-  try { window.localStorage.setItem(PANEL_PREF_KEY, pref) } catch { /* private mode dkk: abaikan */ }
-}
-
 /** Cocokkan cwd canonical sesi ke workspace terdaftar (exact, lalu case-insensitive). */
 function matchWorkspace(workspaces: WorkspaceInfo[], cwdPath: string): WorkspaceInfo | undefined {
   const exact = workspaces.find((w) => w.path === cwdPath)
@@ -181,7 +160,7 @@ const PANEL_CSS = `
 `
 
 /* ---------- panel (kolom details layout, bukan overlay) ---------- */
-function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => void; openDetails?: () => void }): React.ReactElement {
+function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => void }): React.ReactElement {
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([])
   const [workspaceId, setWorkspaceId] = useState('')
   const [cwd, setCwd] = useState('')
@@ -192,13 +171,11 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
   const manualRef = useRef(false)
   const lastSessionRef = useRef<string | undefined>(undefined)
 
-  // Auto-open saat scope sesi materialisasi — TAPI hormati pref pengguna:
-  // yang pernah sengaja menutup panel (pref 'closed') TIDAK dibuka paksa
-  // lagi tiap pindah sesi. Seat ini remount per sesi, jadi guard ini wajib.
-  useEffect(() => {
-    if (readPanelPref() === 'closed') return
-    props.openDetails?.()
-  }, [props.openDetails])
+  // TANPA auto-open (keputusan pemilik 25 Aug 2026): panel selalu mulai
+  // tertutup di browser siapa pun, tanpa kecuali — hanya terbuka lewat
+  // tombol Files (toggle) di header sesi. Dulu ada efek openDetails di
+  // mount sini; karena seat ber-scope sesi (remount tiap pindah sesi),
+  // efek itu menimpa tutup-manual pemilik → dihapus total.
 
   // Sesi aktif + cwd canonical-nya (SnapshotStore kompatibel useSyncExternalStore).
   const list = props.sessions?.list ?? NO_LIST
@@ -389,20 +366,11 @@ export function apply(ctx: Context): void {
   }).layout
 
   // layout actions bisa belum "wired" sebelum root entry mount — jangan
-  // biarkan error itu membunuh render panel. Buka/tutup VIA PLUGIN ini
-  // (tombol Files / tombol X) = keputusan sadar pengguna → catat pref di
-  // SATU tempat supaya tidak ada jalur yang lupa menulis (kejadian nyata
-  // 25 Aug 2026: toggle menutup panel tapi pref tak tertulis → pindah sesi
-  // langsung auto-open lagi). Auto-close AppFrame saat pindah sesi TIDAK
-  // lewat sini → pref tidak tersentuh, by design.
-  const openPanel = () => {
-    writePanelPref('open')
-    try { layout?.openDetails() } catch { /* belum wired */ }
-  }
-  const closePanel = () => {
-    writePanelPref('closed')
-    try { layout?.closeDetails() } catch { /* belum wired */ }
-  }
+  // biarkan error itu membunuh render panel. Satu-satunya pemicu buka/tutup
+  // = klik pengguna (tombol Files / tombol X); ui-layout boleh saja
+  // menutup sendiri saat pindah sesi — tidak ada yang dibukakan ulang.
+  const openPanel = () => { try { layout?.openDetails() } catch { /* belum wired */ } }
+  const closePanel = () => { try { layout?.closeDetails() } catch { /* belum wired */ } }
 
   // Stylesheet scoped + disposable: hover/focus butuh pseudo-class yang
   // tidak bisa dinyatakan di inline style; dibuang saat plugin unload.
@@ -431,7 +399,7 @@ export function apply(ctx: Context): void {
   // (default 0 → throw "already has a registration at priority 0"); shadow
   // wajib priority LEBIH RENDAH (lowest renders) → -1.
   slots.slots.inject('details', () => slots.slots.register(
-    { name: 'details', priority: -1, inject: () => ({ sessions, closeDetails: closePanel, openDetails: openPanel }) },
+    { name: 'details', priority: -1, inject: () => ({ sessions, closeDetails: closePanel }) },
     FileExplorerPanel,
   ))
   // Slot ber-kind 'list' WAJIB options.id (identitas entry di ledger list).
