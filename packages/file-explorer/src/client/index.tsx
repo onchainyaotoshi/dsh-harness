@@ -1,12 +1,14 @@
 /**
  * dsh-file-explorer — browser half.
  * Dua entry slot:
- *   conversation.session.header.utilities → tombol buka panel di kanan atas
+ *   conversation.session.header.utilities → tombol TOGGLE panel di kanan atas
  *                                            header sesi (di samping tombol
  *                                            "session log"), order 1 supaya
  *                                            render setelah occupant default
  *                                            (order 0). Scope sesi: tombol
  *                                            tidak muncul di layar hero.
+ *                                            Klik = buka bila tertutup,
+ *                                            tutup bila terbuka (cek DOM).
  *   details              → KOLOM KANAN LAYOUT beneran (bukan overlay):
  *                          panel file memakan layout, chat terdorong, lebar
  *                          bisa di-drag (clamp 300–520px, default 360px),
@@ -46,7 +48,6 @@ interface WorkspaceInfo { id: string; title: string; path: string }
 interface FsEntry { name: string; type: 'file' | 'directory' | 'other'; size?: number; path: string }
 interface ListResponse { path: string; entries: FsEntry[] }
 interface ReadResponse { path: string; text: string }
-interface ActiveDirResponse { workdir: string | null }
 interface ApiError { error?: string; detail?: string }
 /** State viewer: teks ATAU preview gambar ATAU catatan (mis. file biner). */
 interface ViewerState { path: string; text?: string; imageUrl?: string; note?: string }
@@ -54,8 +55,6 @@ interface ViewerState { path: string; text?: string; imageUrl?: string; note?: s
 /** Mirror batas /raw di host: gambar lebih besar dilewati dengan catatan. */
 const MAX_RAW_BYTES = 8 * 1024 * 1024
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i
-/** Poll workdir sesi aktif (sinyal "agent lagi di mana"). */
-const FOLLOW_POLL_MS = 3000
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -73,35 +72,33 @@ function parentOf(path: string): string {
   return idx <= 0 ? '/' : path.slice(0, idx)
 }
 
+/* ---------- preferensi buka/tutup panel (persisten per browser) ---------- */
+/**
+ * Seat `details` ber-scope SESI → komponen panel remount setiap pindah sesi.
+ * Tanpa ingatan persisten, auto-open di mount selalu menimpa keputusan
+ * pengguna yang sengaja menutup panel (keluhan nyata 25 Aug 2026). Pref ini
+ * HANYA ditulis oleh aksi sadar pengguna: tombol close panel → 'closed',
+ * tombol Files di header → 'open'. Tanpa pref (browser baru) → auto-open,
+ * paritas dengan perilaku lama.
+ */
+const PANEL_PREF_KEY = 'dsh-file-explorer.details'
+type PanelPref = 'open' | 'closed'
+function readPanelPref(): PanelPref | null {
+  try {
+    const v = window.localStorage.getItem(PANEL_PREF_KEY)
+    return v === 'open' || v === 'closed' ? v : null
+  } catch { return null }
+}
+function writePanelPref(pref: PanelPref): void {
+  try { window.localStorage.setItem(PANEL_PREF_KEY, pref) } catch { /* private mode dkk: abaikan */ }
+}
+
 /** Cocokkan cwd canonical sesi ke workspace terdaftar (exact, lalu case-insensitive). */
 function matchWorkspace(workspaces: WorkspaceInfo[], cwdPath: string): WorkspaceInfo | undefined {
   const exact = workspaces.find((w) => w.path === cwdPath)
   if (exact) return exact
   const lower = cwdPath.toLowerCase()
   return workspaces.find((w) => w.path.toLowerCase() === lower)
-}
-
-/** Path berada DI DALAM root (segment-aware: /a/b TIDAK di dalam /a/bc). */
-function isInsideDir(path: string, dir: string): boolean {
-  return path === dir || path.startsWith(dir + '/')
-}
-
-/**
- * Workspace terdaftar yang root-nya MENGANDUNG path — terdalam bila root
- * bertumpuk (mis. worktree linked di dalam repo utama). Untuk "ikut agent":
- * workdir sesi boleh jadi SUBDIR workspace (bukan exact match).
- */
-function deepestWorkspace(workspaces: WorkspaceInfo[], path: string): WorkspaceInfo | undefined {
-  let best: WorkspaceInfo | undefined
-  let bestLen = -1
-  for (const w of workspaces) {
-    const root = w.path.replace(/\/+$/, '')
-    if (isInsideDir(path, root) && root.length > bestLen) {
-      best = w
-      bestLen = root.length
-    }
-  }
-  return best
 }
 
 /* ---------- fallback stabil kalau service sessions absen ---------- */
@@ -195,38 +192,19 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
   const manualRef = useRef(false)
   const lastSessionRef = useRef<string | undefined>(undefined)
 
-  // Panel selalu terbuka saat kolom details tampil: auto-open saat scope sesi
-  // materialisasi (paritas dengan perilaku auto-open versi overlay).
-  useEffect(() => { props.openDetails?.() }, [props.openDetails])
+  // Auto-open saat scope sesi materialisasi — TAPI hormati pref pengguna:
+  // yang pernah sengaja menutup panel (pref 'closed') TIDAK dibuka paksa
+  // lagi tiap pindah sesi. Seat ini remount per sesi, jadi guard ini wajib.
+  useEffect(() => {
+    if (readPanelPref() === 'closed') return
+    props.openDetails?.()
+  }, [props.openDetails])
 
   // Sesi aktif + cwd canonical-nya (SnapshotStore kompatibel useSyncExternalStore).
   const list = props.sessions?.list ?? NO_LIST
   const listSnapshot = useSyncExternalStore(list.subscribe, list.getSnapshot)
   const currentId = listSnapshot.current
   const currentCwd = currentId === undefined ? undefined : listSnapshot.byId?.[currentId]?.cwd
-
-  // Opsi A — ikuti workdir sesi aktif (agent): workdir bash terbaru BARU-BARU
-  // sesi, bukan cwd sesi (stempel saat dibuat, tidak pernah berubah walau
-  // agent kerja di worktree linked — lihat CLAUDE.md). Host expose route
-  // /active-dir; client cukup poll ringan selagi panel terbuka.
-  const [activeWorkdir, setActiveWorkdir] = useState<string | null>(null)
-  const lastFollowRef = useRef<string | null>(null)
-
-  // Sesi berganti → lupa follow lama.
-  useEffect(() => { lastFollowRef.current = null }, [currentId])
-
-  useEffect(() => {
-    if (currentId === undefined) { setActiveWorkdir(null); return }
-    let cancelled = false
-    const tick = () => {
-      getJson<ActiveDirResponse>(API + '/active-dir?session=' + encodeURIComponent(currentId))
-        .then((d) => { if (!cancelled) setActiveWorkdir(d.workdir) })
-        .catch(() => { /* degradasi: perilaku cwd tetap jalan */ })
-    }
-    tick()
-    const timer = setInterval(tick, FOLLOW_POLL_MS)
-    return () => { cancelled = true; clearInterval(timer) }
-  }, [currentId])
 
   useEffect(() => {
     getJson<WorkspaceInfo[]>(API + '/workspaces')
@@ -270,31 +248,6 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
   useEffect(() => {
     if (workspaceId && cwd) void load(workspaceId, cwd)
   }, [workspaceId, load])
-
-  // Navigasi ikuti agent: workdir di dalam workspace → buka tree di sana.
-  // Pindah workspace hanya kalau pengguna belum override manual (dropdown);
-  // memindah tree di dalam workspace yang sama tidak dianggap override.
-  // Penanda lastFollowRef mencegah perang dengan navigasi manual pengguna:
-  // re-follow hanya saat workdir BERUBAH (bukan tiap poll).
-  // PENTING: efek ini WAJIB SETELAH deklarasi `load` (useCallback) — deps
-  // array dievaluasi SAAT RENDER, akses `load` sebelum inisialisasi = TDZ
-  // "Cannot access 'load' before initialization" → slot padam (kejadian
-  // nyata 24 Aug 2026; deps dievaluasi di tempat useEffect dipanggil).
-  useEffect(() => {
-    if (activeWorkdir === null || activeWorkdir === lastFollowRef.current) return
-    lastFollowRef.current = activeWorkdir
-    const ws = deepestWorkspace(workspaces, activeWorkdir)
-    if (ws === undefined) return // di luar semua root — perilaku cwd tetap
-    if (ws.id !== workspaceId) {
-      if (manualRef.current) return // pilihan manual pengguna menang
-      // workspaceId + cwd di-set pada render yang sama → effect load
-      // bawaan [workspaceId] yang fetch; tanpa double-load race.
-      setWorkspaceId(ws.id)
-      setCwd(activeWorkdir)
-      return
-    }
-    if (activeWorkdir !== cwd) void load(workspaceId, activeWorkdir)
-  }, [activeWorkdir, workspaces, workspaceId, cwd, load])
 
   const openFile = useCallback(async (path: string, size?: number) => {
     try {
@@ -404,10 +357,25 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
 }
 
 /* ---------- tombol di header sesi (kanan atas, di samping session log) ---------- */
-function FilesHeaderAction(props: { openDetails?: () => void }): React.ReactElement {
+/**
+ * TOGGLE: klik pertama buka panel, klik berikutnya menutup. Sumber kebenaran
+ * status = geometri DOM, BUKAN state mirror: konten seat `details` tetap
+ * ter-mount walau kolom diciutkan (grid 0px — AppFrame selalu merender slot,
+ * diverifikasi di bundle dsh-client-ui-layout 0.1.1-rc.1), jadi
+ * `.dshfe-panel`.clientWidth > 0 = panel benar-benar terlihat. Mirror state
+ * sendiri pasti desinkron karena ui-layout mem-close details OTOMATIS tiap
+ * pindah sesi (useLayoutEffect AppFrame) di luar kendali plugin ini.
+ */
+function FilesHeaderAction(props: { openDetails?: () => void; closeDetails?: () => void }): React.ReactElement {
+  const onClick = () => {
+    const el = document.querySelector('.dshfe-panel')
+    const isOpen = el !== null && el.clientWidth > 0
+    if (isOpen) props.closeDetails?.()
+    else props.openDetails?.()
+  }
   return (
     <button className="dshfe-toggle-btn" title="File explorer" aria-label="File explorer"
-      onClick={() => props.openDetails?.()}>
+      onClick={onClick}>
       <FolderIcon color="inherit" />
     </button>
   )
@@ -421,9 +389,20 @@ export function apply(ctx: Context): void {
   }).layout
 
   // layout actions bisa belum "wired" sebelum root entry mount — jangan
-  // biarkan error itu membunuh render panel.
-  const openPanel = () => { try { layout?.openDetails() } catch { /* belum wired */ } }
-  const closePanel = () => { try { layout?.closeDetails() } catch { /* belum wired */ } }
+  // biarkan error itu membunuh render panel. Buka/tutup VIA PLUGIN ini
+  // (tombol Files / tombol X) = keputusan sadar pengguna → catat pref di
+  // SATU tempat supaya tidak ada jalur yang lupa menulis (kejadian nyata
+  // 25 Aug 2026: toggle menutup panel tapi pref tak tertulis → pindah sesi
+  // langsung auto-open lagi). Auto-close AppFrame saat pindah sesi TIDAK
+  // lewat sini → pref tidak tersentuh, by design.
+  const openPanel = () => {
+    writePanelPref('open')
+    try { layout?.openDetails() } catch { /* belum wired */ }
+  }
+  const closePanel = () => {
+    writePanelPref('closed')
+    try { layout?.closeDetails() } catch { /* belum wired */ }
+  }
 
   // Stylesheet scoped + disposable: hover/focus butuh pseudo-class yang
   // tidak bisa dinyatakan di inline style; dibuang saat plugin unload.
@@ -459,7 +438,7 @@ export function apply(ctx: Context): void {
   // order 1: occupant bawaan "session-log-download" pakai order default 0,
   // render ascending → tombol Files tampil di sebelah KANAN tombol session log.
   slots.slots.inject('conversation.session.header.utilities', () => slots.slots.register(
-    { name: 'conversation.session.header.utilities', id: 'file-explorer-toggle', order: 1, inject: () => ({ openDetails: openPanel }) },
+    { name: 'conversation.session.header.utilities', id: 'file-explorer-toggle', order: 1, inject: () => ({ openDetails: openPanel, closeDetails: closePanel }) },
     FilesHeaderAction,
   ))
 }

@@ -15,12 +15,11 @@ cordis.patch.yml      # layer: - insert: [{ id: file-explorer, name: dsh-file-ex
 
 Satu row di `cordis.patch.yml` melayani host half DAN browser roster sekaligus.
 
-### Host half — 5 route exact di `ctx.webServer` (`/plugins/dsh-file-explorer/api/*`)
+### Host half — 4 route exact di `ctx.webServer` (`/plugins/dsh-file-explorer/api/*`)
 
 | Route | Fungsi | Batas |
 |---|---|---|
 | `GET /workspaces` | daftar workspace terdaftar | — |
-| `GET /active-dir` | workdir bash TERAKHIR satu sesi (sinyal "agent lagi di mana") | lookup map O(1); backfill 1× per sesi per boot |
 | `GET /list` | listing satu direktori | — |
 | `GET /read` | isi satu file teks | 512 KiB (`MAX_READ_BYTES`) |
 | `GET /raw` | preview biner (gambar) | 8 MiB (`MAX_RAW_BYTES`), Content-Type dari ekstensi (`MIME_BY_EXT`) |
@@ -40,10 +39,9 @@ filesystem.
 
 `webServer` (register route exact), `fs` (resolve/contains/listDir/stat/
 readText/readBytes), `workspaceRegistry`, `slots`, `layout`
-(openDetails/closeDetails), `sessions.list`, event `session/event` + service
-opsional `sessionQuery` (via `ctx.get`, pola defensif dsh-git-state).
-Diverifikasi di dsh 0.1.0-rc.6 — kalau dsh di-upgrade, cek ulang seam-nya
-dulu.
+(openDetails/closeDetails), `sessions.list`. Diverifikasi di dsh
+0.1.0-rc.6 dan di-upgrade ulang ke 0.1.1-rc.1 (25 Aug 2026) — kalau dsh
+di-upgrade lagi, cek ulang seam-nya dulu.
 
 Tombol launcher ditaruh di slot `conversation.session.header.utilities`
 (kind list, scope sesi) dengan `order: 1` — occupant bawaan
@@ -100,6 +98,18 @@ pemilik saat pindah dari `sidebar.footer.action` (scope root).
   "perang navigasi" — re-follow hanya saat workdir BERUBAH, bukan tiap poll
   (kalau tidak, navigasi manual pengguna langsung ditimpa 3 dtk kemudian).
   Workdir di luar semua workspace → perilaku cwd tetap (batas containment).
+  **UPDATE 25 Aug 2026 — FITUR DIHAPUS (sanction pemilik):** bukti dari
+  session JSONL (`~/.dsh/sessions/*/*/session.jsonl.zstd`, parse per-event,
+  JANGAN grep mentah — teks percakapan ikut ter-index dan menghasilkan false
+  positive): sinyal `arguments.workdir` HANYA ada di sesi bridge Claude Code
+  saat agen SECARA EKSPLISIT mengirim argumen `workdir` pada panggilan bash
+  (sesi kaya worktree: 41/116 panggilan; sesi lain: 0). Sesi DSH-native tidak
+  pernah memancarkan `tool/code-dispatch-start` sama sekali (mereka pakai
+  `tool/call` tanpa workdir yang dipersist). Jadi `/active-dir` mengembalikan
+  null untuk mayoritas sesi → follow tampak mati. Host-nya sendiri terbukti
+  berfungsi (curl live mengembalikan path worktree untuk sesi yang kaya
+  sinyal). Kesimpulan: premis desain (sinyal workdir selalu tersedia) salah —
+  jangan bangun ulang fitur ini tanpa sinyal level harness.
 - **Deps array useEffect diakses SAAT RENDER — JANGAN referensikan
   useCallback yang dideklarasikan DI BAWAHNYA** (kejadian nyata 24 Aug 2026,
   "Cannot access 'load' before initialization"): efek follow menaruh `load`
@@ -131,6 +141,29 @@ pemilik saat pindah dari `sidebar.footer.action` (scope root).
   apply — `layout` bisa belum "wired" sebelum root entry mount (error
   "layout: panel actions not wired"); bungkus try/catch. Verifikasi occupancy
   lewat Inspect provider (Slots.listSubTree root "details").
+- **Seat scope-sesi REMOUNT tiap pindah sesi — auto-open WAJIB hormati pref
+  pengguna** (kejadian nyata 25 Aug 2026): seat `details` ber-scope session →
+  entry baru per sesi, mount effect jalan lagi di setiap klik sesi di sidebar.
+  Tanpa ingatan persisten, `openDetails()` di mount selalu menimpa keputusan
+  pengguna yang sengaja menutup panel (keluhan pemilik). Fix: pref
+  buka/tutup di localStorage (`dsh-file-explorer.details`,
+  helper `readPanelPref`/`writePanelPref`); mount effect skip bila `'closed'`;
+  default tanpa pref = tetap auto-open (paritas perilaku lama).
+- **`ctx.layout` write-only — status buka/tutup dibaca dari DOM, dan tulis
+  pref di SATU jalur** (25 Aug 2026): face `layout` hanya punya
+  openDetails/closeDetails (bundle ui-layout 0.1.1-rc.1); state asli = width px
+  di store root (0 = tutup) dan TIDAK terekspos ke plugin. Toggle tombol Files
+  membaca truth dari DOM: konten details tetap ter-mount walau kolom 0px
+  (AppFrame selalu merender slot), jadi `.dshfe-panel`.clientWidth > 0 =
+  benar-benar terlihat. JANGAN bikin state mirror sendiri — ui-layout
+  me-CLOSE details OTOMATIS tiap pindah sesi (useLayoutEffect AppFrame) di
+  luar kendali plugin. Dua jebakan terkait: (1) baca DOM/layout SYNC setelah
+  dispatch menghasilkan nilai STALE (commit React async) — tunggu frame
+  berikutnya sebelum asertif; (2) tulis pref wajib di SATU tempat
+  (openPanel/closePanel di apply) — semula toggle menutup panel tapi pref tak
+  tertulis karena jalur close tak menulis → pindah sesi langsung auto-open
+  lagi (bug nyata saat verifikasi browser). Auto-close AppFrame TIDAK lewat
+  jalur ini → pref tak tersentuh, by design.
 
 ## Verifikasi
 

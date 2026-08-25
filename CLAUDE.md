@@ -31,7 +31,7 @@ Monorepo plugin DeepSeek Harness. **Baca ini sebelum ngoding di repo ini.**
 ```
 packages/
   file-explorer/          # panel tree file + viewer source code
-    src/index.ts          # host half (Node): route HTTP list/read/raw/workspaces/active-dir
+    src/index.ts          # host half (Node): route HTTP list/read/raw/workspaces
     src/client/index.tsx  # browser half: seat details (kolom kanan) + conversation.session.header.utilities
     cordis.patch.yml      # layer: - insert: [{ id: file-explorer, name: dsh-file-explorer }]
   dsh-tunnel-loopback/    # paksa connection.isLoopback=true di client (tunnel/proxy)

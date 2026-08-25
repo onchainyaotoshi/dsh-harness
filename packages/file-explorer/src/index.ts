@@ -1,9 +1,10 @@
 /**
  * dsh-file-explorer — host half.
- * Register 3 route HTTP exact di ctx.webServer:
+ * Register 4 route HTTP exact di ctx.webServer:
  *   GET /plugins/dsh-file-explorer/api/workspaces  → daftar workspace terdaftar
  *   GET /plugins/dsh-file-explorer/api/list        → listing satu direktori
  *   GET /plugins/dsh-file-explorer/api/read        → isi satu file teks
+ *   GET /plugins/dsh-file-explorer/api/raw         → preview biner (gambar)
  *
  * SECURITY BOUNDARY (jangan dilemahkan): semua akses file wajib berada di
  * dalam root workspace terdaftar (ctx.workspaceRegistry) dan lolos
@@ -74,83 +75,7 @@ function sendError(res: ServerResponse, err: unknown): void {
   sendJson(res, 500, { error: 'internal-error' })
 }
 
-interface SessionQueryLike { readSession?(id: string): Promise<unknown> }
-
-type SessionEventLike = { type?: string; data?: { arguments?: { workdir?: string } } }
-
-/**
- * Index WORKDIR bash terbaru per sesi — sinyal "agent sedang bekerja di
- * direktori mana". Beda dari `sessions.list.byId[id].cwd`, yang di-stempel
- * sekali saat sesi dibuat dan TIDAK berubah walau agent `cd` di dalam
- * worktree (kejadian nyata 24 Aug 2026 — sesi "bikin worktree" di camis:
- * cwd sesi tetap root repo, agent kerja via workdir di worktree linked).
- * Dipakai panel untuk mengikuti agent; pola event sama dengan dsh-git-state.
- */
-const MAX_WORKDIR_SESSIONS = 64
-const latestWorkdir = new Map<string, string>()
-const backfilled = new Set<string>()
-const backfillInflight = new Map<string, Promise<string | null>>()
-
-function setLatestWorkdir(sessionId: string, wd: string): void {
-  if (wd === '') return
-  if (!latestWorkdir.has(sessionId) && latestWorkdir.size >= MAX_WORKDIR_SESSIONS) {
-    const oldest = latestWorkdir.keys().next().value
-    if (oldest !== undefined) latestWorkdir.delete(oldest)
-  }
-  latestWorkdir.set(sessionId, wd)
-}
-
-/**
- * Workdir terbaru satu sesi: index live dulu; kalau belum ada (riwayat
- * sebelum boot), backfill 1× per sesi per boot — scan event TERAKHIR ke
- * depan, ambil `tool/code-dispatch-start` terakhir yang membawa workdir.
- * Modest: 1 readSession sekali; dedup in-flight. Tanpa ini sesi idle
- * (agent sudah selesai) tidak pernah terdorong ke workdir-nya.
- */
-async function latestSessionWorkdir(ctx: Context, sessionId: string): Promise<string | null> {
-  const hit = latestWorkdir.get(sessionId)
-  if (hit !== undefined) return hit
-  if (backfilled.has(sessionId)) return null
-  const existing = backfillInflight.get(sessionId)
-  if (existing) return existing
-  const p = (async () => {
-    let found: string | null = null
-    try {
-      const sq = (ctx as unknown as { get<T>(key: string): T | undefined })
-        .get<SessionQueryLike>('sessionQuery')
-      const snap = (await sq?.readSession?.(sessionId)) as { events?: unknown[] } | undefined
-      const events = snap?.events
-      if (Array.isArray(events)) {
-        for (let i = events.length - 1; i >= 0; i--) {
-          const e = events[i] as SessionEventLike | null
-          if (e?.type !== 'tool/code-dispatch-start') continue
-          const wd = e.data?.arguments?.workdir
-          if (typeof wd === 'string' && wd !== '') { found = wd; break }
-        }
-      }
-    } catch { /* degradasi halus: tanpa riwayat, panel tetap perilaku cwd */ }
-    backfilled.add(sessionId)
-    if (found !== null) latestWorkdir.set(sessionId, found)
-    backfillInflight.delete(sessionId)
-    return found
-  })()
-  backfillInflight.set(sessionId, p)
-  return p
-}
-
 export function apply(ctx: Context): void {
-  // Index live workdir sesi — stream event append (0 readSession untuk sesi
-  // lain; identik dengan pola dsh-git-state; event lama tanpa workdir
-  // otomatis terlewati). Cast: 'session/event' tidak ikut type graph build.
-  const on = ctx.on as (name: string, listener: (session: { id?: unknown }, event: SessionEventLike) => void) => () => boolean
-  on('session/event', (session, event) => {
-    if (event?.type !== 'tool/code-dispatch-start') return
-    const wd = event.data?.arguments?.workdir
-    if (typeof wd !== 'string') return
-    const sid = String(session?.id ?? '')
-    if (sid !== '') setLatestWorkdir(sid, wd)
-  })
-
   /**
    * Resolve root workspace + target file dengan containment check.
    * Semua path dari klien harus absolut; klien TIDAK pernah menggabung
@@ -180,25 +105,6 @@ export function apply(ctx: Context): void {
         title: w.title,
         path: w.path,
       })))
-    },
-  }))
-
-  // --- active-dir: workdir terakhir sesi (client pakai utk ikuti agent) ---
-  // Route murah: lookup map O(1) + backfill 1× per sesi per boot (dedup
-  // in-flight). TIDAK menyentuh filesystem/git — aman dipoll.
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'exact',
-    path: API_PREFIX + '/active-dir',
-    handler: async (req: IncomingMessage, res: ServerResponse) => {
-      try {
-        const url = new URL(req.url ?? '/', 'http://localhost')
-        const sessionId = url.searchParams.get('session') ?? ''
-        if (sessionId === '') return sendJson(res, 200, { workdir: null })
-        const workdir = await latestSessionWorkdir(ctx, sessionId)
-        sendJson(res, 200, { workdir })
-      } catch (err) {
-        sendError(res, err)
-      }
     },
   }))
 
