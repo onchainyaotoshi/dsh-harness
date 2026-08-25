@@ -62,7 +62,10 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
   `---\nname:<skill>` lalu backtick PENUTUP yang tidak di-escape, decode
   `\uXXXX`/`\``, lalu `adaptSkillText` menyuntik blok notranslate untuk skill
   di `NOTRANSLATE_SKILLS` (marker `dsh-bridge:notranslate`, idempoten)
-  SEBELUM compare/write; (3) symlink entry bridge → user scope (relatif, pola
+  SEBELUM compare/write; (2b) `enforceNotranslate`: suntik blok notranslate
+  ke `<name>/SKILL.md` setiap anggota `NOTRANSLATE_SKILLS` yang ada di
+  bridge — mencakup jalur MIRROR (frontend-design) yang tidak lewat
+  extractBuiltin; (3) symlink entry bridge → user scope (relatif, pola
   ast-grep); (4) prune symlink yatim yang resolve-nya DI DALAM bridge folder.
 - **Tidak menyentuh registry skill** — tidak ada `ctx.skills`; tidak ada
   service; `inject: []`. Write-only filesystem + symlink.
@@ -127,7 +130,11 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
   disisipkan setelah ekstraksi sebelum compare/write, marker HTML
   `dsh-bridge:notranslate` buat idempoten; hanya salinan bridge yang berubah,
   binary tetap asli (precedent `adaptCommandText`). Perluas ke skill lain =
-  tambah satu nama di `NOTRANSLATE_SKILLS`.
+  tambah satu nama di `NOTRANSLATE_SKILLS`. Cakupan kini termasuk
+  `frontend-design` (hasil MIRROR cache plugin, bukan ekstrak) — jalur
+  mirror dijaga fase 2b `enforceNotranslate`; konsekuensinya copyTree
+  menyalin ulang SKILL.md itu tiap boot (ukuran salinan ≠ sumber cache)
+  lalu blok disuntik lagi: dua tulisan kecil per boot, konten tetap stabil.
 - **Upgrade binary Claude Code bisa merusak pola ekstraksi — cek tiap upgrade**
   (incident 25 Aug 2026): binary 2.1.245 gagal diekstrak ("pola tidak
   ditemukan") karena `lastIndexOf('---', at-300)` hanya menemukan posisi

@@ -189,8 +189,8 @@ function adaptCommandText(name: string, text: string): string {
 /* ------------------------------------------------------------------ */
 
 /** Skill yang salinan bridge-nya wajib membawa aturan notranslate.
- *  Perluas cakupan = tambah satu nama di sini. */
-const NOTRANSLATE_SKILLS = new Set(['artifact-design', 'artifact-diagramming'])
+ *  Nama = nama entry di bridge folder. Perluas cakupan = tambah satu nama. */
+const NOTRANSLATE_SKILLS = new Set(['artifact-design', 'artifact-diagramming', 'frontend-design'])
 
 /** Marker idempotensi — dipakai adaptSkillText agar blok tidak dobel. */
 const NOTRANSLATE_MARKER = 'dsh-bridge:notranslate'
@@ -221,6 +221,28 @@ function adaptSkillText(name: string, text: string): string {
   if (!NOTRANSLATE_SKILLS.has(name)) return text
   if (text.includes(NOTRANSLATE_MARKER)) return text
   return text.replace(/\s*$/, '') + '\n' + NOTRANSLATE_BLOCK
+}
+
+/** Fase 2b: pastikan SETIAP anggota NOTRANSLATE_SKILLS yang ada di bridge
+ *  membawa blok — mencakup jalur MIRROR (mis. frontend-design dari cache
+ *  plugin) yang tidak melewati extractBuiltin. Catatan: karena ukuran
+ *  salinan ≠ sumber cache, copyTree menyalin ulang tiap boot lalu blok
+ *  disuntik lagi — dua tulisan kecil per boot, konten tetap stabil. */
+function enforceNotranslate(bridge: string, log: (m: string) => void): void {
+  for (const name of NOTRANSLATE_SKILLS) {
+    const out = join(bridge, name, 'SKILL.md')
+    try {
+      if (!existsSync(out)) continue
+      const before = readFileSync(out, 'utf8')
+      const after = adaptSkillText(name, before)
+      if (after !== before) {
+        writeFileSync(out, after)
+        log(`notranslate ${name}: blok disuntik`)
+      }
+    } catch (error) {
+      log(`notranslate ${name}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 }
 
 /** Salin asset satu plugin ke bridge folder. */
@@ -469,6 +491,9 @@ export async function runSync(ctx: Context, config: { mirror?: string[]; extract
   for (const skillName of config.extract ?? []) {
     extractBuiltin(skillName, bridge, log)
   }
+
+  // 2b) notranslate untuk jalur mirror (tidak lewat extractBuiltin)
+  enforceNotranslate(bridge, log)
 
   // 3) symlink bridge → user scope
   const skillsScope = join(claudeDir(), 'skills')
