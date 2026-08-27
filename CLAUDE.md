@@ -64,6 +64,9 @@ packages/
     cordis.patch.yml      # layer: - insert: [{id: claude-skill-bridge, name: dsh-claude-skill-bridge}]
                           # CATATAN: customSkillDirs di row skill-filesystem di-DISABLE oleh dsh-web-app
                           # di profil web — registrasi via user scope (verified 24 Aug 2026).
+                          # CATATAN 27 Aug 2026: TIDAK dipasang lagi di profil web — jalur mirror
+                          # digantikan dsh-claude-compat (baca ~/.claude/plugins langsung); paket tetap
+                          # di sini sebagai sumber extract builtin binary + adaptasi konten (CLAUDE.md paket).
 ```
 
 Detail per plugin: `packages/*/CLAUDE.md` masing-masing.

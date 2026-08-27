@@ -156,6 +156,32 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
   Sebelum pakai API schema: probe `node --input-type=module -e "import z
   from '@deepseek-ai/schemastery'; console.log(typeof z.string().X)"`.
 
+## Status profil web & archiving (27 Aug 2026)
+
+- Plugin ini TIDAK lagi dipasang di profil web — jalur MIRROR digantikan
+  `dsh-claude-compat` (baca `~/.claude/plugins` langsung, fresh, tanpa
+  salinan). TETAP bernilai di monorepo sebagai satu-satunya pembuat dua hal
+  yang tak bisa dihasilkan plugin lain: (a) `extract` builtin binary
+  (artifact-design, artifact-diagramming), (b) salinan ADAPTED
+  (`frontend-design` + marker notranslate; `code-review.md` tool-agnostik).
+- 27 Aug 2026: `~/.dsh/claude-bridge` DIHAPUS, namun hanya setelah 4 entry
+  bernilai adaptasi dipromosikan jadi file NYATA di user scope:
+  `~/.claude/skills/{artifact-design,artifact-diagramming,frontend-design}`
+  + `~/.claude/commands/code-review.md`. Marker `dsh-bridge:notranslate` dan
+  teks adaptasi ikut terpindah (verifikasi grep; watcher live menampilkan
+  keduanya di katalog tanpa restart). 14 skill superpowers = salinan verbatim
+  cache → tidak dipromosikan (compat sajikan dari `~/.claude/plugins`,
+  rank 750).
+- Resync manual bila binary/plugin berubah: `dsh plugin --profile web add
+  ./packages/dsh-claude-skill-bridge` → restart dsh → sync idempoten → lepas
+  lagi dari profile. EKSPEKTASI: fase (3) symlink MENGGANTI file user scope
+  dengan symlink ke bridge dir (bukan bug).
+- JANGAN hapus 4 entry adapted itu tanpa persiapan — satu-satunya sumber
+  pengganti adalah ekstrak ulang dari binary (RAW, tanpa adaptasi
+  notranslate → insiden 25 Aug 2026 bisa kembali). Pelajaran: sebelum
+  mengganti/menghapus bridge lama, periksa apakah isinya ADAPTED (hash vs
+  sumber cache/binary) — bukan asumsi "salinan murni".
+
 ## Verifikasi
 
 ```sh
