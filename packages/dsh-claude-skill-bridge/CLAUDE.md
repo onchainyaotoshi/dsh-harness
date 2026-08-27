@@ -155,6 +155,23 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
   ada: `.default() .required() .min() .max() .pattern() .comment() dll`.
   Sebelum pakai API schema: probe `node --input-type=module -e "import z
   from '@deepseek-ai/schemastery'; console.log(typeof z.string().X)"`.
+- **`dsh-claude-compat` tidak fallback ke default dir — plugin dengan manifest
+  tanpa field dir hilang diam-diam** (incident 27 Aug 2026): compat 0.7.0 hanya
+  scan `<installPath>/skills|commands` kalau `.claude-plugin/plugin.json`
+  MENDIKLARAKAN field-nya; kalau manifest ADA tapi field-nya tidak (superpowers,
+  frontend-design, claude-code-setup, remember, code-simplifier...), konten
+  plugin dilewati — katalog DSH kosong untuk plugin itu padahal di Claude Code
+  jalan. `agents/` tak terdampak (selalu discan tanpa cek manifest), makanya
+  agent pr-review-toolkit tampil sementara skill superpowers hilang — sempat
+  disalahkan ke copy manual, bukan root cause. Fix lokal (belum ada upstream):
+  `cd ~/.dsh/profiles/web && pnpm patch dsh-claude-compat` → di
+  `node_modules/.pnpm_patches/dsh-claude-compat@0.7.0/src/plugins.js` tambah
+  fallback: `skillDirs.length === 0 && pathExists(<installPath>/skills)` →
+  push default dir (sama utk `commands`, `const` → `let`) →
+  `pnpm patch-commit` (tulis `patches/dsh-claude-compat.patch` +
+  `patchedDependencies` di pnpm-lock.yaml → durable) → `node --check` +
+  `dsh --profile web --dump-config` → restart dsh. Saat compat di-upgrade:
+  cek apakah fallback sudah upstream; kalau belum pnpm patch lagi.
 
 ## Status profil web & archiving (27 Aug 2026)
 
@@ -171,7 +188,9 @@ cordis.patch.yml    # - insert: [{id: claude-skill-bridge, name: dsh-claude-skil
   teks adaptasi ikut terpindah (verifikasi grep; watcher live menampilkan
   keduanya di katalog tanpa restart). 14 skill superpowers = salinan verbatim
   cache → tidak dipromosikan (compat sajikan dari `~/.claude/plugins`,
-  rank 750).
+  rank 750). 27 Aug 2026: compat 0.7.0 GAGAL memenuhi janji ini (lihat lesson
+  learned di atas) → dipatch fallback default dir; terverifikasi 14 skill
+  superpowers + claude-automation-recommender muncul di katalog.
 - Resync manual bila binary/plugin berubah: `dsh plugin --profile web add
   ./packages/dsh-claude-skill-bridge` → restart dsh → sync idempoten → lepas
   lagi dari profile. EKSPEKTASI: fase (3) symlink MENGGANTI file user scope

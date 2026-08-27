@@ -67,6 +67,10 @@ packages/
                           # CATATAN 27 Aug 2026: TIDAK dipasang lagi di profil web — jalur mirror
                           # digantikan dsh-claude-compat (baca ~/.claude/plugins langsung); paket tetap
                           # di sini sebagai sumber extract builtin binary + adaptasi konten (CLAUDE.md paket).
+                          # CATATAN 27 Aug 2026 (lanjutan): dsh-claude-compat 0.7.0 dipatch lokal via
+                          # pnpm patch di profil web — fallback scan default dir <installPath>/skills|
+                          # commands saat manifest tanpa field dir (superpowers dkk.). Patch di luar repo;
+                          # pelajaran lengkap di CLAUDE.md paket ini.
 ```
 
 Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
