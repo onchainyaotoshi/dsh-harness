@@ -3,3 +3,5 @@ lib/
 dist/
 *.tsbuildinfo
 .DS_Store
+# dump snapshot a11y Playwright — tidak untuk repo (bisa berisi path pribadi)
+/snapshot-*.md
