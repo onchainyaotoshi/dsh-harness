@@ -5,3 +5,5 @@ dist/
 .DS_Store
 # dump snapshot a11y Playwright — tidak untuk repo (bisa berisi path pribadi)
 /snapshot-*.md
+# catatan deploy privat (path absolut/domain VPS) — lokal saja, jangan pernah di-push
+deploy/CLAUDE.md
