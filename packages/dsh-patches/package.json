@@ -1,0 +1,39 @@
+{
+  "name": "dsh-patches",
+  "version": "0.1.0",
+  "description": "Satu tempat untuk semua patch deploy (no-seam workaround) DeepSeek Harness: auto-repair saat boot + reminder argumen required untuk Code Mode. Host-only, tanpa UI.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/index.d.ts",
+    "cordis.patch.yml",
+    "CLAUDE.md",
+    "README.md",
+    "scripts"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "prepare": "tsdown",
+    "patch": "node scripts/apply-patch.mjs",
+    "patch:check": "node scripts/apply-patch.mjs --check"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "license": "MIT"
+}

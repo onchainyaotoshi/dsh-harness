@@ -71,6 +71,17 @@ packages/
                           # pnpm patch di profil web — fallback scan default dir <installPath>/skills|
                           # commands saat manifest tanpa field dir (superpowers dkk.). Patch di luar repo;
                           # pelajaran lengkap di CLAUDE.md paket ini.
+  dsh-patches/            # SATU tempat SEMUA patch deploy (workaround no-seam) + reminder Code Mode
+    src/index.ts          # host half HOST-ONLY: boot auto-repair semua patch (queueMicrotask,
+                          #   marker-aware, warn bukan throw) + systemPrompt.section order 151
+                          #   (reminder argumen required, hanya di code/both presentation)
+    scripts/patch-core.mjs  # SUMBER TUNGGAL: PATCHES + patchSource + resolvePatchPath + inspectPatch
+    scripts/apply-patch.mjs # CLI manual di atas core (check/apply, idempoten)
+    cordis.patch.yml      # layer: - insert: [{id: patches, name: dsh-patches}]
+                          # MIGRASI 27 Aug 2026: memakan patch yang tadinya di luar repo —
+                          #   patch-dsh-ws-heartbeat.mjs (script + ExecStartPre di dsh.service)
+                          #   dan pnpm patch dsh-claude-compat (patches/ + patchedDependencies di
+                          #   pnpm-workspace.yaml profil) — keduanya sudah dicopot setelah paket ini.
 ```
 
 Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
@@ -87,6 +98,14 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
 - Nama paket: dsh-<kata> (unscoped). Nama = id plugin = id modul browser.
 - Build: pnpm install (sekali) → pnpm build (tsdown; preset bersama
   tsdown.client.ts).
+- **Host half yang `extends Service` WAJIB punya `static provide` unik**
+  (insiden 27 Aug 2026): tanpa `provide`, cordis mendaftarkan service dengan
+  nama `undefined`, dan plugin KEDUA yang `extends Service` tanpa `provide`
+  (di profil web: `dsh-copy-link-sesi`) menabrak registrasi itu → boot dsh
+  GAGAL dengan `service "undefined" has been registered at <...>` — situs
+  mati total. Plugin pertama yang "menang" tidak menunjukkan gejala apa pun,
+  jadi jebakan ini tidak kehabisan sendiri; check saat review/klaim
+  "boot tidak pernah gagal".
 - Bundle client wajib eksternal semua @deepseek-ai/* (purity gate).
 - Bundle client WAJIB punya shim CJS di banner/footer preset (tsdown.client.ts):
   `var module = { exports: {} }; var exports = module.exports;` (banner) +

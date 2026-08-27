@@ -1,0 +1,6 @@
+# Layer bundle dsh-patches — diterapkan setelah semua bundle sebelumnya.
+# Host-only: satu plugin yang memegang SEMUA patch deploy DeepSeek Harness
+# (workaround no-seam), dipasang ulang otomatis saat boot.
+- insert:
+    - id: patches
+      name: dsh-patches
