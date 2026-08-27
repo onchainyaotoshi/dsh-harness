@@ -154,6 +154,14 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
   dsh di-upgrade, cek ulang seam-nya dulu.
 - Publish: build dulu, lalu pnpm --filter <paket> publish --access public.
   User lain: dsh plugin --profile web add <nama> + restart.
+- **CI & rilis (28 Aug 2026)**: `.github/workflows/` — `gitleaks.yml`
+  (gerbang WAJIB di push/PR ke master: scan secret history+tree, merah kalau
+  ada), `auto-release.yml` (push ke master → build harus lulus → tag semver +
+  GitHub Release dengan changelog; bump dari commit conventional:
+  `feat` = minor, fix/docs = patch, `!`/`BREAKING` = major). Rollback ke depan
+  = checkout tag/release terakhir. Aturan privasi tetap berlaku SEPERTI
+  SEBELUMNYA — gitleaks membantu, TIDAK menggantikan audit manual
+  (grep + git log) sebelum push.
 - **PRIVASI (wajib, pasca-insiden 15 Aug 2026): repo ini PUBLIK.** Jangan pernah
   menulis nama asli, email pribadi, path absolut (di luar repo), atau identitas VPS
   ke file repo ini — termasuk CLAUDE.md per paket. Identitas git = noreply

@@ -1,0 +1,20 @@
+# .gitleaks.toml — extends default rules with project-specific allowlist
+#
+# How gitleaks matches: it uses the default ruleset (AWS keys, GitHub tokens,
+# private keys, generic API keys, etc.) from gitleaks.toml baseline.
+# We extend this with an allowlist below for known false positives.
+#
+# CATATAN: repo ini PUBLIK. Kalau gitleaks menemukan secret → BLOCK, jangan
+# force-push. Hapus secret dari history (rewrite), bukan cuma dari branch.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-specific false positives"
+
+# Calon pola FP yang boleh di-allowlist:
+# - paths  : jalur file yang KNOWINGLY memuat string mirip secret (mis. dummy data test)
+# - commits: commit lama yang sudah dibersihkan (sebelum rewrite history dibuat)
+# Isi hanya setelah DIVERIFIKASI — kalau ragu, biarkan false positive dulu.
+paths = []

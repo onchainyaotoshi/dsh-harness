@@ -1,0 +1,79 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Build check (jangan tag kalau build rusak)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Determine version bump
+        id: tag
+        run: |
+          # Ambil tag terakhir (sort by semver)
+          LAST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1)
+
+          if [ -z "$LAST_TAG" ]; then
+            echo "tag=v0.1.0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Parse major.minor.patch
+          MAJOR=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f1)
+          MINOR=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f2)
+          PATCH=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f3)
+
+          # Baca commit messages sejak tag terakhir
+          COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --no-merges)
+
+          # Determine bump type dari conventional commits
+          if echo "$COMMITS" | grep -qiE "^.*!:|BREAKING CHANGE"; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif echo "$COMMITS" | grep -qiE "^feat(\(.*\))?:"; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          echo "tag=v${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          echo "## Changes since ${LAST_TAG}" > changelog.md
+          echo "" >> changelog.md
+          git log ${LAST_TAG}..HEAD --pretty=format:"- %s" --no-merges >> changelog.md
+          echo "" >> changelog.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body_path: changelog.md
+          generate_release_notes: false
