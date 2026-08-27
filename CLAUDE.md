@@ -1,10 +1,15 @@
-# dsh-plugins — catatan untuk agent (DSH / Claude Code)
+# dsh-harness — catatan untuk agent (DSH / Claude Code)
 
-Monorepo plugin DeepSeek Harness. **Baca ini sebelum ngoding di repo ini.**
+Monorepo plugin DeepSeek Harness + artefak deploy. **Baca ini sebelum ngoding di repo ini.**
 
 ## Keputusan terkunci (jangan diubah tanpa konfirmasi pemilik)
 
+- **28 Aug 2026 — Konsolidasi repo: SATU repo `dsh-harness`.** Pengganti
+  `dsh-plugins` + `deepseek-harness-deploy` (kedua repo lama DIARSIPKAN di
+  GitHub). Folder lokal TUNGGAL: `dsh-harness` — sesi chat dimulai di sini
+  saja. ADR: `docs/decisions/2026-08-28-consolidate-repos-dsh-harness.md`.
 - **15 Aug 2026 — Topologi: SATU monorepo ini untuk SEMUA plugin** (opsi B).
+  (Nama repo berubah jadi `dsh-harness` per 28 Aug 2026 — isi keputusan tetap.)
   Satu plugin = satu paket npm di packages/*. JANGAN bikin repo terpisah per
   plugin, JANGAN bikin plugin di luar workspace ini. ADR lengkap:
   docs/decisions/.
@@ -29,6 +34,10 @@ Monorepo plugin DeepSeek Harness. **Baca ini sebelum ngoding di repo ini.**
 ## Struktur
 
 ```
+deploy/                  # artefak deploy dsh (dari repo deepseek-harness-deploy, diarsipkan)
+  loopback-proxy.mjs     # proxy :3081 → :3080 (tulis ulang Host/Origin; dipakai dsh-proxy.service)
+  dsh-git-state-diagram/ # mockup diagram UI dsh-git-state
+  CLAUDE.md              # catatan deploy privat (path abs/domain) — GITIGNORED, lokal saja
 packages/
   file-explorer/          # panel tree file + viewer source code
     src/index.ts          # host half (Node): route HTTP list/read/raw/workspaces

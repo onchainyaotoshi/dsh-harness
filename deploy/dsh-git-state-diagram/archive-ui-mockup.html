@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup UI — dsh-session-archive (C / D / E)</title>
+<style>
+  :root {
+    --bg: #faf8f5; --ink: #1c1917; --panel: #ffffff; --panel2: #f4f2ef;
+    --muted: #57534e; --line: #d6d3d1; --accent: #2f6feb; --accent-soft: #e3ecfd;
+    --ok: #15803d; --okbg: #e0f2e6; --chip: #ece9e4; --warn: #b45309; --warnbg: #fdf0dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171412; --ink: #e7e5e4; --panel: #221d1a; --panel2: #2a2521;
+      --muted: #a8a29e; --line: #44403c; --accent: #7aa5ff; --accent-soft: #24334f;
+      --ok: #4ade80; --okbg: #12301e; --chip: #322c27; --warn: #fbbf24; --warnbg: #38280f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, sans-serif; margin: 0 auto; max-width: 980px; padding: 2rem 1rem 4rem; line-height: 1.5; }
+  h1 { font-size: 1.3rem; margin: 0 0 .3rem; }
+  h2 { font-size: 1rem; margin: 2.2rem 0 .5rem; }
+  .lead { color: var(--muted); font-size: .9rem; }
+  .tag { display: inline-block; font-size: .68rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; background: var(--chip); color: var(--muted); margin-left: .4rem; vertical-align: middle; }
+  .tag.new { background: var(--accent-soft); color: var(--accent); }
+  .tag.builtin { background: var(--okbg); color: var(--ok); }
+  .tag.expensive { background: var(--warnbg); color: var(--warn); }
+  .window { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+  .titlebar { display: flex; align-items: center; gap: .5rem; padding: .5rem .9rem; border-bottom: 1px solid var(--line); background: var(--panel2); font-size: .78rem; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .side-demo { display: flex; gap: 1rem; align-items: flex-start; }
+  .sidebar { width: 250px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: .55rem; font-size: .8rem; }
+  .side-head { font-size: .66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: .3rem .5rem .15rem; }
+  .side-row { display: flex; align-items: center; justify-content: space-between; padding: .32rem .5rem; border-radius: 7px; }
+  .side-row .actions { color: var(--muted); font-size: .7rem; }
+  .menu-pop { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); box-shadow: 0 6px 20px rgba(0,0,0,.12); padding: .25rem 0; margin: .3rem .5rem .6rem; font-size: .78rem; }
+  .menu-item { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .32rem .6rem; }
+  .menu-item.hl { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .foot { margin: .5rem .3rem .3rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .footbtn { display: flex; gap: .45rem; align-items: center; padding: .4rem .55rem; font-size: .8rem; background: var(--panel); cursor: pointer; }
+  .footbtn .ic { font-size: .9rem; }
+  .footbtn .cnt { margin-left: auto; background: var(--chip); border-radius: 999px; font-size: .68rem; padding: .05rem .5rem; color: var(--muted); }
+  .foot-list { border-top: 1px solid var(--line); padding: .35rem .45rem; background: var(--panel2); }
+  .fg-head { font-size: .72rem; font-weight: 700; color: var(--muted); padding: .25rem .2rem .1rem; }
+  .frow { display: flex; align-items: center; gap: .45rem; padding: .28rem .35rem; border-radius: 7px; }
+  .frow .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fbtn { font: inherit; font-size: .68rem; padding: .18rem .5rem; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+
+  .convo-head { display: flex; align-items: center; gap: .5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: .5rem .7rem; font-size: .8rem; margin-bottom: .7rem; }
+  .convo-head .title { font-weight: 650; }
+  .convo-head .spacer { flex: 1; }
+  .iconbtn { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--line); border-radius: 7px; padding: .25rem .5rem; font-size: .76rem; background: var(--panel); color: var(--ink); cursor: pointer; }
+  .iconbtn.new { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .panel { width: 300px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: .8rem; font-size: .8rem; box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+  .panel h3 { margin: 0 0 .6rem; font-size: .88rem; }
+  .g-head { display: flex; align-items: center; gap: .4rem; font-weight: 650; font-size: .78rem; padding: .2rem 0; }
+  .cnt2 { background: var(--chip); color: var(--muted); border-radius: 999px; font-size: .66rem; padding: .02rem .45rem; }
+  .row { display: flex; align-items: center; gap: .5rem; padding: .36rem .5rem; border: 1px solid var(--line); border-radius: 8px; margin-bottom: .28rem; background: var(--panel); }
+  .row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .btn { font: inherit; font-size: .72rem; padding: .28rem .65rem; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; white-space: nowrap; }
+
+  .tree { width: 270px; }
+  .tgroup { font-size: .72rem; font-weight: 700; color: var(--muted); padding: .35rem .5rem .15rem; }
+  .trow { display: flex; align-items: center; gap: .45rem; padding: .3rem .5rem .3rem 1.1rem; border-radius: 7px; font-size: .8rem; }
+  .trow.arch { border-left: 3px solid var(--accent); background: var(--accent-soft); }
+  .warnbox { border: 1px dashed var(--warn); background: var(--warnbg); color: var(--warn); border-radius: 8px; padding: .5rem .7rem; font-size: .76rem; margin-top: .6rem; }
+  .settings { display: flex; min-height: 300px; }
+  .snav { width: 195px; border-right: 1px solid var(--line); padding: .7rem; font-size: .83rem; background: var(--panel2); }
+  .snav-item { padding: .42rem .6rem; border-radius: 7px; color: var(--muted); }
+  .snav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .spage { flex: 1; padding: 1rem 1.1rem; font-size: .84rem; }
+  .spage h3 { margin: 0 0 .2rem; font-size: .95rem; }
+  .sub { color: var(--muted); font-size: .78rem; margin-bottom: .9rem; }
+  .group { margin-bottom: .8rem; }
+  .group-head { display: flex; align-items: center; gap: .45rem; padding: .3rem 0 .25rem; font-weight: 650; font-size: .8rem; }
+  .count { background: var(--chip); color: var(--muted); border-radius: 999px; font-size: .68rem; padding: .05rem .5rem; }
+  .row .t .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .t .ws { font-size: .72rem; color: var(--muted); }
+  .empty { border: 1px dashed var(--line); border-radius: 9px; padding: 1.2rem; text-align: center; color: var(--muted); font-size: .8rem; margin-top: .6rem; }
+  .note { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: .55rem .8rem; border-radius: 0 8px 8px 0; font-size: .82rem; margin: 1.4rem 0 0; }
+</style>
+</head>
+<body>
+
+<h1>Mockup UI — plugin <code>dsh-session-archive</code> (kandidat C / D / E)</h1>
+<p class="lead">Semua opsi (A–E) ditampilkan untuk perbandingan. Gambaran, <b>bukan</b> plugin nyata. Aksi "Archive" tetap bawaan dsh — yang kami bangun hanya daftar sesi terarsip + tombol Unarchive.</p>
+
+<h2>1. Aksi Archive — SUDAAH ADA (bawaan dsh)</h2>
+<div class="window">
+  <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> sidebar — menu baris sesi</div>
+  <div style="padding:.8rem">
+    <div class="sidebar" style="width:100%; max-width:300px">
+      <div class="side-head">Sessions — dsh-plugins</div>
+      <div class="side-row">▸ "Fix event loop git-state" <span class="actions">⋯</span></div>
+      <div class="menu-pop">
+        <div class="menu-item hl">Archive session <span class="tag builtin" style="margin-left:0">built-in</span></div>
+        <div class="menu-item">Rename…</div>
+        <div class="menu-item">Fork…</div>
+        <div class="menu-item">Export log</div>
+      </div>
+      <div class="side-row">▸ "Cek seam archive" <span class="actions">⋯</span></div>
+    </div>
+  </div>
+</div>
+
+<h2>2. OPSI A — halaman di <b>Settings</b> <span class="tag new">baru</span></h2>
+<div class="window">
+  <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Settings</div>
+  <div class="settings">
+    <div class="snav">
+      <div class="snav-item">General</div>
+      <div class="snav-item">Models</div>
+      <div class="snav-item">Plugins</div>
+      <div class="snav-item active">Archived Sessions <span class="tag new">baru</span></div>
+    </div>
+    <div class="spage">
+      <h3>Archived Sessions</h3>
+      <div class="sub">Sesi terarsip tidak tampil di daftar sesi; unarchive mengembalikannya ke posisi semula.</div>
+      <div class="group">
+        <div class="group-head">▸ dsh-plugins <span class="count">2</span></div>
+        <div class="row"><div class="t"><div class="title">"Fix event loop git-state"</div><div class="ws">workspace: dsh-plugins</div></div><button class="btn">Unarchive</button></div>
+        <div class="row"><div class="t"><div class="title">"Cek seam archive"</div><div class="ws">workspace: dsh-plugins</div></div><button class="btn">Unarchive</button></div>
+      </div>
+      <div class="group">
+        <div class="group-head">▸ Unassigned <span class="count">1</span></div>
+        <div class="row"><div class="t"><div class="title">"Catatan lama"</div><div class="ws">workspace: —</div></div><button class="btn">Unarchive</button></div>
+      </div>
+      <div class="empty">Saat kosong: <i>No archived sessions.</i></div>
+    </div>
+  </div>
+</div>
+
+<h2>★ Interaksi tombol Unarchive (Opsi A) — tanpa dialog konfirmasi</h2>
+<div class="window">
+  <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> klik → busy → baris hilang · reversibel (bisa di-archive lagi kapan pun)</div>
+  <div style="padding:.8rem">
+    <div class="spage" style="padding:0">
+      <div class="group" style="margin-bottom:.5rem">
+        <div class="group-head">1 · Idle — tombol normal</div>
+        <div class="row"><div class="t"><div class="title">"Cek seam archive"</div><div class="ws">workspace: dsh-plugins</div></div><button class="btn">Unarchive</button></div>
+      </div>
+      <div class="group" style="margin-bottom:.5rem">
+        <div class="group-head">2 · Klik — tombol busy (disabled), double-click aman</div>
+        <div class="row"><div class="t"><div class="title">"Cek seam archive"</div><div class="ws">workspace: dsh-plugins</div></div><button class="btn" disabled>Unarchiving…</button></div>
+      </div>
+      <div class="group" style="margin-bottom:.5rem">
+        <div class="group-head">3 · Sukses — baris hilang, sesi kembali ke tree workspace (tanpa reload)</div>
+        <div class="empty" style="margin-top:0">(baris dihapus dari daftar · count 2 → 1)</div>
+      </div>
+      <div class="group" style="margin-bottom:0">
+        <div class="group-head">4 · Gagal (jaringan/dsh error) — pesan inline, tombol kembali aktif</div>
+        <div class="row"><div class="t"><div class="title">"Cek seam archive"</div><div class="ws" style="color:var(--warn)">⚠ Gagal: internal-error — coba lagi</div></div><button class="btn">Retry</button></div>
+      </div>
+    </div>
+    <div class="note" style="margin:.8rem 0 0"><b>Kenapa tanpa konfirmasi:</b> unarchive itu <b>reversibel</b> — sesi bisa di-archive lagi kapan pun lewat menu bawaan. Dialog konfirmasi hanya pantas untuk aksi destruktif/ireversibel (delete permanen — tidak ada di v1). Kalau kamu tetap mau dialog "Unarchive sesi ini?", bisa ditambahkan — bilang saja.</div>
+  </div>
+</div>
+
+<h2>3. OPSI B — tombol di kaki sidebar + <b>panel</b> (gaya file-explorer) <span class="tag new">baru</span></h2>
+<div class="window">
+  <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> sidebar + panel terpisah (seam resmi sidebar.footer.action)</div>
+  <div style="padding:.8rem">
+    <div class="side-demo">
+      <div class="sidebar">
+        <div class="side-head">Workspaces</div>
+        <div class="side-row">▸ dsh-plugins</div>
+        <div class="side-row">▸ camis_api_native</div>
+        <div class="side-head">Sessions</div>
+        <div class="side-row">▸ "Fix event loop…"</div>
+        <div class="side-row">▸ "Returan offline…"</div>
+        <div class="footbtn" style="margin:.5rem .3rem .3rem"><span class="ic">🗂</span> Archived <span class="cnt" style="margin-left:auto">3</span></div>
+      </div>
+      <div class="panel" style="align-self:flex-start">
+        <h3>Archived Sessions</h3>
+        <div class="g-head">▸ dsh-plugins <span class="cnt2">2</span></div>
+        <div class="row"><span class="t">"Fix event loop git-state"</span><button class="btn">Unarchive</button></div>
+        <div class="row"><span class="t">"Cek seam archive"</span><button class="btn">Unarchive</button></div>
+        <div class="g-head">▸ Unassigned <span class="cnt2">1</span></div>
+        <div class="row"><span class="t">"Catatan lama"</span><button class="btn">Unarchive</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>4. OPSI C — tombol di kaki sidebar, daftar mengembang <b>inline</b> <span class="tag new">baru</span></h2>
+<div class="window">
+  <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> sidebar (seam resmi sidebar.footer.action)</div>
+  <div style="padding:.8rem">
+    <div class="sidebar" style="width:100%; max-width:300px">
+      <div class="side-head">Workspaces</div>
+      <div class="side-row">▸ dsh-plugins</div>
+      <div class="side-row">▸ camis_api_native</div>
+      <div class="side-head">Sessions</div>
+      <div class="side-row">▸ "Fix event loop…"</div>
+      <div class="side-row">▸ "Returan offline…"</div>
+      <div class="foot">
+        <div class="footbtn"><span class="ic">🗂</span> Archived <span class="cnt">3</span></div>
+        <div class="foot-list">
+          <div class="fg-head">▸ dsh-plugins</div>
+          <div class="frow"><span class="t">"Fix event loop git-state"</span><button class="fbtn">Unarchive</button></div>
+          <div class="frow"><span class="t">"Cek seam archive"</span><button class="fbtn">Unarchive</button></div>
+          <div class="fg-head">▸ Unassigned</div>
+          <div class="frow"><span class="t">"Catatan lama"</span><button class="fbtn">Unarchive</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>5. OPSI D — tombol di header percakapan + panel <span class="tag new">baru</span></h2>
+<div class="window">
+  <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> header percakapan (seam conversation.session.header.utilities — tempat tombol Files &amp; download log)</div>
+  <div style="padding:.8rem">
+    <div class="convo-head">
+      <span class="title">dsh-plugins</span> <span style="color:var(--muted)">▾</span>
+      <span class="spacer"></span>
+      <span class="iconbtn">🗀 Files</span>
+      <span class="iconbtn">⇩ Log</span>
+      <span class="iconbtn new">🗂 Archived</span>
+    </div>
+    <div class="side-demo">
+      <div class="panel">
+        <h3>Archived Sessions</h3>
+        <div class="g-head">▸ dsh-plugins <span class="cnt2">2</span></div>
+        <div class="row"><span class="t">"Fix event loop git-state"</span><button class="btn">Unarchive</button></div>
+        <div class="row"><span class="t">"Cek seam archive"</span><button class="btn">Unarchive</button></div>
+        <div class="g-head">▸ Unassigned <span class="cnt2">1</span></div>
+        <div class="row"><span class="t">"Catatan lama"</span><button class="btn">Unarchive</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>6. OPSI E — grup "Archived" di dalam tree sidebar <span class="tag expensive">butuh fork — mahal</span></h2>
+<div class="window">
+  <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> sidebar — WorkspaceBrowser diganti (cara plugin komunitas)</div>
+  <div style="padding:.8rem">
+    <div class="sidebar tree">
+      <div class="tgroup">Workspaces</div>
+      <div class="trow">▸ dsh-plugins</div>
+      <div class="trow">▸ camis_api_native</div>
+      <div class="tgroup">Archived (3)</div>
+      <div class="trow arch">"Fix event loop git-state" — <button class="fbtn">Unarchive</button></div>
+      <div class="trow arch">"Cek seam archive" — <button class="fbtn">Unarchive</button></div>
+      <div class="trow arch">"Catatan lama" — <button class="fbtn">Unarchive</button></div>
+    </div>
+    <div class="warnbox">⚠ Tidak ada seam resmi untuk ini — harus fork/replace WorkspaceBrowser (pola plugin komunitas): kode 100+ KB, rawan drift setiap dsh upgrade.</div>
+  </div>
+</div>
+
+<div class="note"><b>Perilaku sama di semua opsi:</b> klik Unarchive → sesi balik ke tree workspace seketika (update lintas tab otomatis), tombol disabled saat request jalan, tanpa delete permanen di v1.</div>
+
+</body>
+</html>

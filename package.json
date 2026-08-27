@@ -1,5 +1,5 @@
 {
-  "name": "dsh-plugins",
+  "name": "dsh-harness",
   "private": true,
   "version": "0.0.0",
   "description": "Monorepo plugin DeepSeek Harness (satu repo, banyak paket npm).",

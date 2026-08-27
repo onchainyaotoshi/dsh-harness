@@ -1,6 +1,8 @@
-# dsh-plugins
+# dsh-harness
 
-Monorepo plugin [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — kumpulan plugin DSH buatan komunitas.
+Monorepo plugin [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) + artefak deploy —
+konsolidasi `dsh-plugins` dan `deepseek-harness-deploy` (kedua repo lama diarsipkan, lihat
+[docs/decisions/2026-08-28-consolidate-repos-dsh-harness.md](docs/decisions/2026-08-28-consolidate-repos-dsh-harness.md)).
 Satu repo, banyak paket npm (opsi B — lihat [ADR topologi](docs/decisions/2026-08-15-plugin-monorepo-topology.md)).
 
 ## Daftar plugin
@@ -10,6 +12,18 @@ Satu repo, banyak paket npm (opsi B — lihat [ADR topologi](docs/decisions/2026
 | `dsh-file-explorer` | Panel tree file + viewer source code workspace aktif di Web UI |
 | `dsh-session-archive` | Halaman kelola sesi terarsip (Settings → Archived Sessions) + unarchive dengan dialog konfirmasi — derivatif Apache-2.0 dari MichengAI/dsh-archive-manager (tanpa fork UI, tanpa delete permanen) |
 | `dsh-tunnel-loopback` | Deployment tunnel/proxy: paksa `connection.isLoopback` di client supaya persistensi settings (tema/bahasa/welcome notice) hidup saat URL browser bukan loopback — WAJIB terdaftar sebelum `@deepseek-ai/dsh-web-app` di `dsh.profile.bundles` |
+| `dsh-git-state` | Strip status git (branch/perubahan/stash/worktree/PR) di atas composer |
+| `dsh-copy-link-sesi` | Menu "Salin link" di baris sesi + deep-link `?session=` (buka sesi dari URL) |
+| `dsh-custom-settings` | Tab Settings "Custom Settings": tunable live + cek/upgrade versi dsh |
+| `dsh-claude-skill-bridge` | Bridge skill & command Claude Code → DSH (sumber extract skill builtin binary + adaptasi konten) |
+| `dsh-patches` | Satu tempat semua patch deploy (workaround no-seam) + reminder Code Mode |
+
+## Struktur
+
+- `packages/*` — plugin (satu paket npm per plugin)
+- `deploy/` — artefak deploy: `loopback-proxy.mjs` (dipakai `dsh-proxy.service`) dan mockup UI
+  `dsh-git-state-diagram/`. Catatan deploy privat ada di `deploy/CLAUDE.md` — file LOKAL,
+  gitignored, tidak pernah di-push.
 
 ## Cara develop
 
@@ -22,7 +36,7 @@ pnpm watch          # watch client bundle (untuk iterasi UI)
 ## Cara test di VPS
 
 ```sh
-cd dsh-plugins && pnpm build
+cd dsh-harness && pnpm build
 dsh plugin --profile web add ./packages/file-explorer
 dsh --profile web --dump-config | grep file-explorer   # layer harus muncul
 sudo systemctl restart dsh                            # SEKALI, di jeda antar turn!

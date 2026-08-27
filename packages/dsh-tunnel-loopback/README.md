@@ -48,7 +48,7 @@ ada.
 > monorepo via link lokal:
 >
 > ```sh
-> dsh plugin --profile web add link:/<path checkout dsh-plugins>/packages/dsh-tunnel-loopback
+> dsh plugin --profile web add link:/<path checkout dsh-harness>/packages/dsh-tunnel-loopback
 > ```
 >
 > Instruksi registry di bawah berlaku setelah paket ini di-publish.
