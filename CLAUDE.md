@@ -115,6 +115,15 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
   mati total. Plugin pertama yang "menang" tidak menunjukkan gejala apa pun,
   jadi jebakan ini tidak kehabisan sendiri; check saat review/klaim
   "boot tidak pernah gagal".
+- **RENAME repo/cwd ⟶ JANGAN pindahkan isi `~/.dsh/sessions/<cwd-lama>--`**
+  (insiden 27 Aug 2026, crash loop `corrupt session log`): setiap file sesi
+  menyimpan identitas `cwd` di baris header `session.jsonl.zstd` — memindah
+  file antar direktori cwd tanpa menulis ulang field itu membuat
+  `assertStoredIdentity` throw → boot gagal berulang. Kalau cwd berubah:
+  rewrite field `cwd` di header tiap file (metode + backup: lihat
+  `deploy/CLAUDE.md` — insiden & repair lengkap). Gejala rangkap: dua error
+  berbeda bisa tumpuk dalam satu malam (`service "undefined"` lalu
+  `corrupt session log`) — baca `journalctl` sampai error terakhir.
 - Bundle client wajib eksternal semua @deepseek-ai/* (purity gate).
 - Bundle client WAJIB punya shim CJS di banner/footer preset (tsdown.client.ts):
   `var module = { exports: {} }; var exports = module.exports;` (banner) +

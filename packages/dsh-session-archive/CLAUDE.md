@@ -90,6 +90,14 @@ cordis.patch.yml      # PENGECUALIAN konvensi: - {id: workspace, disabled: true}
   bukan milik section aktif): tombol "Open configuration file" muncul di
   setiap section termasuk punya kita — BUKAN bug plugin. Jangan coba
   sembunyikan dari sisi plugin.
+- **Boot bisa mati karena store sesi korup di sisi LAIN** (insiden 27 Aug
+  2026): init plugin ini (`list` → `sessionPersistence.list` →
+  `assertStoredIdentity`) adalah canary paling awal untuk identitas sesi —
+  jika `~/.dsh/sessions/<cwd>--` punya file yang header-nya tidak cocok lokasi
+  fisik, crash-loop `corrupt session log` muncul lewat stack plugin ini.
+  Diagnosa: `journalctl -u dsh -n 100` + cek `systemctl show dsh -p NRestarts`
+  (loop tersembunyi jika hanya `activating`). Detail repair header zstd:
+  deploy/CLAUDE.md.
 
 ## Verifikasi
 
