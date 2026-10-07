@@ -5,7 +5,8 @@
   "description": "Monorepo plugin DeepSeek Harness (satu repo, banyak paket npm).",
   "scripts": {
     "build": "pnpm -r build",
-    "watch": "pnpm -r --parallel watch"
+    "watch": "pnpm -r --parallel watch",
+    "test": "node --test tests/*.test.mjs && pnpm --filter dsh-bridges test"
   },
   "devDependencies": {
     "tsdown": "^0.22.14",
