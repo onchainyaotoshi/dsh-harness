@@ -111,3 +111,14 @@ curl -sS -X POST http://127.0.0.1:3080/plugins/dsh-session-archive/api/unarchive
 # Checkpoint WAJIB sebelum restart: dsh --profile web --dump-config → row
 # `workspace` disabled:true + row `session-archive` aktif.
 ```
+
+## Migrasi 7 Oct 2026 — DSH 0.2.0-rc.2
+
+DSH 0.2 sudah menyediakan
+`WorkspaceRegistry.unarchiveSession`; gunakan implementasi parent dan hapus
+mutasi state private duplikat. Subclass/disable row workspace masih dipakai
+untuk mempertahankan komposisi instalasi yang ada. Sisi browser memakai
+`dsh-api-session-controller` dan `dsh-api-workspace-controller`.
+Method `workspaces.list.getSnapshot` kini membaca receiver internal:
+`useSyncExternalStore((cb) => list.subscribe(cb), () => list.getSnapshot())`
+wajib, atau halaman arsip crash `refreshSnapshot` undefined.

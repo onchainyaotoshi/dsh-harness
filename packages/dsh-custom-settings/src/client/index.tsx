@@ -3,7 +3,7 @@
  * Section Settings "Custom Settings" (slot settings.section, order 26 =
  * PALING AKHIR, setelah "Archived Sessions" order 25):
  *   - form tunable (render otomatis dari GET /api/tunables; nilai dari
- *     settingsScope.bind({namespace:'custom-settings'}); Save via scope.set)
+ *     configForms.bind({namespace:'custom-settings'}); Save via scope.set)
  *   - kartu versi dsh: versi terpasang tampil instan (GET /api/status, lokal),
  *     tombol "Cek versi terbaru" (GET /api/version, npm), tombol Upgrade
  *     dengan dialog konfirmasi (POST /api/upgrade → npm install → restart).
@@ -16,7 +16,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ReactElement } from 'react'
 
 export const name = 'custom-settings'
-export const inject = ['settingsScope', 'slots']
+export const inject = ['configForms', 'slots']
 
 const API = '/plugins/dsh-custom-settings/api'
 const STATUS_POLL_MS = 2000
@@ -35,7 +35,7 @@ interface ScopeLike {
   unset(field: string): Promise<unknown>
 }
 interface SettingsScopeFace {
-  bind(spec: { namespace: string }): ScopeLike
+  get(entryId: string): ScopeLike
 }
 interface TunablePreset { label: string; value: number }
 interface Tunable {
@@ -214,7 +214,7 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
     setSaveState((prev) => ({ ...prev, [t.id]: 'saving' }))
     try {
       // Tulis lewat route HOST sendiri, BUKAN scope.set: kontroler
-      // settingsScope dsh-client-ui-settings 0.1.1 MENELAN respons non-ok
+      // configForms dsh-client-ui-settings 0.1.1 MENELAN respons non-ok
       // (konflik revision dari tab lain, rejected) dan resolve biasa →
       // notif "Tersimpan" palsu (kejadian nyata 25 Aug 2026). Route ini
       // mengembalikan hasil nyata + nilai ter-apply terbaru.
@@ -318,7 +318,7 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
   return (
     <div className="dscs-root">
       <p className="dscs-intro">
-        Setting kustom dsh: nilai tersimpan permanen di ~/.dsh/settings.yaml dan diterapkan
+        Setting kustom dsh: nilai tersimpan permanen di profil DSH aktif dan diterapkan
         saat boot; tunable bertanda "berlaku langsung" ikut diterapkan saat diubah — tanpa restart.
       </p>
 
@@ -390,7 +390,7 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
               ) : t.consumer === 'browser' ? (
                 <span className="dscs-hint">Dipakai browser half (strip Git State) — nilai baru aktif di tiap tab pada siklus refresh berikutnya.</span>
               ) : (
-                <span className="dscs-hint">codeRuntime tidak tersedia — belum diterapkan.</span>
+                <span className="dscs-hint">Runtime PTC tidak tersedia — belum diterapkan.</span>
               )}
               {saveState[t.id] === 'error' && <p className="dscs-error">Gagal menyimpan: {saveError[t.id] ?? 'kesalahan tidak diketahui'}.</p>}
             </div>
@@ -486,14 +486,14 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
 
 /* ---------- registrasi ---------- */
 export function apply(ctx: Context): void {
-  const settingsScope = (ctx as unknown as { settingsScope?: SettingsScopeFace }).settingsScope
+  const configForms = (ctx as unknown as { configForms?: SettingsScopeFace }).configForms
   const slots = (ctx as unknown as {
     slots: {
       inject(slotName: string, callback: () => void): void
       register(spec: unknown, component: unknown): void
     }
   }).slots
-  if (!settingsScope || !slots) return // degradasi halus: tanpa tab
+  if (!configForms || !slots) return // degradasi halus: tanpa tab
 
   // Stylesheet scoped + disposable (pola dsh-file-explorer/dsh-session-archive).
   ctx.effect(() => {
@@ -504,7 +504,7 @@ export function apply(ctx: Context): void {
     return () => { el.remove() }
   })
 
-  const scope = settingsScope.bind({ namespace: 'custom-settings' })
+  const scope = configForms.get('custom-settings')
 
   // WAJIB lewat slots.inject (anti-race deklarasi slot); slot list wajib options.id.
   // Catatan: `slots` di sini SUDAH ctx.slots (di-destructure di atas) — jangan

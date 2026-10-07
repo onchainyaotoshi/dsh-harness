@@ -32,105 +32,8 @@ export const STATUS = {
   NOT_FOUND: 'not-found',
 }
 
-// ---------------------------------------------------------------------------
-// Patch 1: heartbeat ping WebSocket downlink (dsh-client-connection)
-// Mencegah Cloudflare edge memutus koneksi setelah idle ±100-120 detik.
-// Kejadian nyata 24 Aug 2026: UPGRADE /api/events.mux berulang tiap ~127 dtk.
-// ---------------------------------------------------------------------------
-const WS_CONN = {
-  id: 'ws-heartbeat-connection',
-  pkg: '@deepseek-ai/dsh-client-connection',
-  fileRel: 'lib/index.js',
-  marker: '// [dsh-ws-heartbeat-patch]',
-  steps: [
-    {
-      old: `var WebSocketDownlinks = class {
-	api;
-	server = new WebSocketServer({ noServer: true });
-	pumps = /* @__PURE__ */ new Set();`,
-      replacement: `var WebSocketDownlinks = class {
-	api;
-	server = new WebSocketServer({ noServer: true });
-	pumps = /* @__PURE__ */ new Set();
-	/** // [dsh-ws-heartbeat-patch] heartbeat intervals per live socket. */
-	heartbeats = /* @__PURE__ */ new Set();`,
-    },
-    {
-      old: `		await Promise.all(this.pumps);`,
-      replacement: `		for (const timer of this.heartbeats) clearInterval(timer);
-		this.heartbeats.clear();
-		await Promise.all(this.pumps);`,
-    },
-    {
-      old: `		this.server.handleUpgrade(req, socket, head, (websocket) => {
-			const abort = new AbortController();
-			websocket.once("close", () => {
-				abort.abort();
-			});`,
-      replacement: `		this.server.handleUpgrade(req, socket, head, (websocket) => {
-			const abort = new AbortController();
-			// // [dsh-ws-heartbeat-patch] idle timeout di proxy/edge (Cloudflare ±100-120s) memutus
-			// downlink tanpa traffic; ping 25s menjaga koneksi tetap aktif.
-			const heartbeat = setInterval(() => {
-				if (websocket.readyState === WebSocket.OPEN) websocket.ping();
-			}, 25000);
-			this.heartbeats.add(heartbeat);
-			const clearHeartbeat = () => {
-				clearInterval(heartbeat);
-				this.heartbeats.delete(heartbeat);
-			};
-			websocket.once("close", () => {
-				clearHeartbeat();
-				abort.abort();
-			});`,
-    },
-    {
-      old: `			websocket.once("error", () => {
-				abort.abort();
-			});`,
-      replacement: `			websocket.once("error", () => {
-				clearHeartbeat();
-				abort.abort();
-			});`,
-    },
-  ],
-}
-
-// ---------------------------------------------------------------------------
-// Patch 2: client resync mempertahankan pending waits (dsh-client-runtime)
-// Kartu Plan review / ask_user_question hilang sendiri saat reconnect karena
-// pending.clear() berbalapan dengan replay host (24 Aug 2026).
-// ---------------------------------------------------------------------------
-const WS_RESYNC = {
-  id: 'ws-heartbeat-resync',
-  pkg: '@deepseek-ai/dsh-client-runtime',
-  fileRel: 'lib/client.js',
-  marker: '/* [dsh-ws-heartbeat-patch] keep pending waits across resync',
-  steps: [
-    {
-      old: `				this.baseSeq = 0;
-				this.pending.clear();
-				this.pendingRev++;`,
-      replacement: `				this.baseSeq = 0;
-				/* [dsh-ws-heartbeat-patch] keep pending waits across resync the host replays question/approval/requested per
-				 * mux open and mint() replaces by key, so keeping the waits lets the
-				 * replay refresh them; clearing here raced the replay and silently
-				 * dropped the pending card (Plan review / ask_user_question). */
-				this.pendingRev++;`,
-    },
-  ],
-}
-
-// ---------------------------------------------------------------------------
-// Patch 3: dsh-claude-compat fallback default dir (manifest tanpa field dir)
-// Manifest plugin Claude Code yang tidak mendeklarasikan `skills`/`commands`
-// (superpowers, frontend-design, dll.) bikin katalog DSH kosong padahal di
-// Claude Code jalan — mirror perilaku fallback Claude Code (27 Aug 2026).
-// SEAKAN-AN ULANG: patch ini sebelumnya di-maintain pnpm patch di profil;
-// karena sekarang dikelola plugin ini, `patchedSig` menangani file yang
-// SUDAH ter-patch pnpm (cukup suntik marker) sedangkan `steps` menangani file
-// pristine (pnpm patch sudah dicabut).
-// ---------------------------------------------------------------------------
+// DSH 0.2 owns WebSocket heartbeats in api-gateway. Claude directory discovery
+// and admission of audited legacy Claude message sources still need patches.
 const COMPAT = {
   id: 'claude-compat-default-dirs',
   pkg: 'dsh-claude-compat',
@@ -158,7 +61,69 @@ const COMPAT = {
   ],
 }
 
-export const PATCHES = [WS_CONN, WS_RESYNC, COMPAT]
+const LEGACY_CLAUDE_SOURCE = {
+  id: 'session-legacy-claude-source',
+  pkg: '@deepseek-ai/dsh-session-format-v2-to-v3',
+  resolveFrom: '@deepseek-ai/dsh-session',
+  fileRel: 'lib/index.js',
+  marker: '// [dsh-patches:session-legacy-claude-source]',
+  steps: [{
+    old: `function assertSource(message) {
+\tconst source = record(message["source"], "message source");`,
+    replacement: `function assertSource(message) {
+\tconst source = record(message["source"], "message source");
+\t// [dsh-patches:session-legacy-claude-source]
+\t// Released Claude compatibility rules/hook context has no event coordinates.
+\t// Admit only the audited exact shape; leave every other unknown source refused.
+\tif (source["kind"] === "claude-compat" && Object.keys(source).length === 2 &&
+\t\t(source["form"] === "rules" || source["form"] === "hook-context")) return;`,
+  }],
+}
+
+const COMPAT_MESSAGE_SOURCE = {
+  id: 'claude-compat-message-source',
+  pkg: 'dsh-claude-compat',
+  fileRel: 'src/index.js',
+  marker: '// [dsh-patches:claude-compat-message-source]',
+  steps: [
+    {
+      old: `    const present = (list) => list.some((m) => m?.source?.kind === 'plugin' && m.source.plugin === 'dsh-claude-compat');`,
+      replacement: `    // [dsh-patches:claude-compat-message-source]
+    const isCompatSource = (source) => ['claude-compat', 'dsh-claude-compat', 'plugin:dsh-claude-compat', 'plugin:claude-compat'].includes(source?.kind)
+      || (source?.kind === 'plugin' && source.plugin === 'dsh-claude-compat');
+    const present = (list) => list.some((m) => isCompatSource(m?.source));`,
+    },
+    {
+      old: `          && event.data?.source?.kind === 'plugin'
+          && event.data.source.plugin === 'dsh-claude-compat';`,
+      replacement: `          && isCompatSource(event.data?.source);`,
+    },
+    {
+      old: `source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'rules' },`,
+      replacement: `source: { kind: 'claude-compat', form: 'rules' },`,
+    },
+  ],
+}
+
+const COMPAT_HOOK_SOURCE = {
+  id: 'claude-compat-hook-source',
+  pkg: 'dsh-claude-compat',
+  fileRel: 'src/hooks.js',
+  marker: '// [dsh-patches:claude-compat-hook-source]',
+  steps: [
+    {
+      old: `import { createUserMessage } from '@deepseek-ai/dsh-llm';`,
+      replacement: `// [dsh-patches:claude-compat-hook-source]
+import { createUserMessage } from '@deepseek-ai/dsh-llm';`,
+    },
+    ...Array.from({ length: 2 }, () => ({
+      old: `source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'hook-context' },`,
+      replacement: `source: { kind: 'claude-compat', form: 'hook-context' },`,
+    })),
+  ],
+}
+
+export const PATCHES = [COMPAT, LEGACY_CLAUDE_SOURCE, COMPAT_MESSAGE_SOURCE, COMPAT_HOOK_SOURCE]
 
 /**
  * Proses satu file untuk satu patch. Murni (tanpa IO): caller yang menulis.
@@ -196,7 +161,12 @@ export function patchSource(source, patch) {
  * @returns {string} jalur absolut file target
  */
 export function resolvePatchPath(patch, baseUrl) {
-  const require = createRequire(baseUrl)
+  let require = createRequire(baseUrl)
+  // Internal format packages are reached through their owning Host package,
+  // which may be globally installed rather than listed directly in a profile.
+  if (patch.resolveFrom !== undefined) {
+    require = createRequire(require.resolve(patch.resolveFrom))
+  }
   let root
   try {
     // Sebagian paket mengekspos "./package.json" di exports.

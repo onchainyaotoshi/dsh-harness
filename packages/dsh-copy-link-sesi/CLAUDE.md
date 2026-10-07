@@ -90,3 +90,18 @@ info `terpasang ulang otomatis` di journal dsh.
 Uji browser: (1) hover baris sesi → menu ⋯ → "Salin link" → paste → buka;
 (2) buka `https://<domain>/?session=<id>` langsung → sesi terbuka, param
 hilang dari URL setelah dimuat.
+
+## Migrasi 7 Oct 2026 — DSH 0.2.0-rc.2
+
+DSH 0.2 mempunyai slot resmi
+`sidebar.workspaces.session.menu.item`; tidak perlu patch bundle upstream.
+Client mendaftarkan MenuItemButton di slot itu dan menutup menu sesudah
+clipboard berhasil. Deep-link memakai `uiWorkspace.openSession` karena
+`sessions.open` dihapus. Timer/subscription dibersihkan saat plugin unload.
+Host hanya marker untuk roster. CLI patch lama dipensiunkan; jangan memakai
+anchor 0.1 untuk bundle 0.2.
+
+- Deep-link harus memanggil `finish()` (set done + unsubscribe) SEBELUM
+  `uiWorkspace.openSession`. Navigasi mem-publish reference-count ke list
+  secara sinkron; urutan terbalik memicu rekursi subscriber sampai
+  `Maximum call stack size exceeded`. Tes VM mereproduksi callback sinkron.

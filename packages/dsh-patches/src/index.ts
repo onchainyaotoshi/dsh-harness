@@ -25,11 +25,10 @@ import { PATCHES, STATUS, inspectPatch } from '../scripts/patch-core.mjs'
 
 const CODE_ARGS_REMINDER = `## Required arguments in run_code programs
 
-Every tool call inside a run_code program must pass ALL required arguments — a missing required property rejects the WHOLE program with "invalid arguments: missing required property ...". In particular:
-
-- \`tools.bash\` requires BOTH \`command\` AND \`description\`.
-- \`tools.edit\` requires \`file_path\`, \`old_string\`, AND \`new_string\`.
-- Check every call against the mandatory fields of its declared type before emitting the program.`
+Every tool call inside a run_code program must pass ALL required arguments from
+its current declared schema. A missing required property rejects the call.
+Check required fields and their types before emitting the program; do not infer
+argument names from another tool or an earlier version of the harness.`
 
 export default class PatchesHost extends Service {
   static inject = []
@@ -101,7 +100,7 @@ export default class PatchesHost extends Service {
             try {
               const tools = ctx.get?.('tools') as { modeFor?: (scope: unknown) => string } | undefined
               const mode = tools?.modeFor?.(context?.scope)
-              if (mode !== 'code' && mode !== 'both') return ''
+              if (mode !== 'ptc' && mode !== 'both') return ''
             } catch {
               return ''
             }

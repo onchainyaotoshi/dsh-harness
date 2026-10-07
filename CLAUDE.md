@@ -80,6 +80,9 @@ packages/
                           # pnpm patch di profil web — fallback scan default dir <installPath>/skills|
                           # commands saat manifest tanpa field dir (superpowers dkk.). Patch di luar repo;
                           # pelajaran lengkap di CLAUDE.md paket ini.
+  dsh-bridges/            # fork bridge tujuh coding agent; peer + lifecycle DSH 0.2
+    UPSTREAM.md           # provenance Apache-2.0 dan commit sumber
+    src/agents/           # skills, memory, hooks, permissions, MCP per tool
   dsh-patches/            # SATU tempat SEMUA patch deploy (workaround no-seam) + reminder Code Mode
     src/index.ts          # host half HOST-ONLY: boot auto-repair semua patch (queueMicrotask,
                           #   marker-aware, warn bukan throw) + systemPrompt.section order 151
@@ -173,3 +176,18 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
   bersangkutan — lesson learned-nya ikut pindah kalau paket dipisah; ke file
   ini (root) hanya kalau berlaku lintas paket. Inilah "progressive learning"
   repo ini — tanpa baris baru, kesalahan yang sama bisa terulang di sesi baru.
+
+## Target aktif setelah migrasi 7 Oct 2026
+
+Plugin UI lokal sekarang menargetkan **DSH 0.2.0-rc.2**, Cordis 4.0.4 dan
+Schemastery 3.18.4. Catatan 0.1 di atas adalah riwayat; baca bagian migrasi
+paling akhir di CLAUDE.md masing-masing paket sebelum mengubah API.
+`dsh-client-runtime` diganti controller API per domain. Config live memakai
+field `.volatile()`, browser memakai `configForms.get`. Menu sesi kini punya
+slot resmi sehingga dsh-copy-link-sesi tidak menulis bundle framework.
+Tes regresi: `pnpm build` lalu `pnpm test` (host mocks, tanpa DSH/Ginee/Odoo).
+
+Periksa juga dependensi profil, bukan hanya binary global: salinan lama
+`dsh-user-approval`/`dsh-sandbox-policy` dari plugin pihak ketiga bisa menutupi
+komponen inti baru, membuat sessionController unavailable. Jangan mengakali
+compatibility gate dengan allow-version tanpa migrasi/verifikasi API.

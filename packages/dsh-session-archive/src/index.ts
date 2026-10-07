@@ -1,7 +1,7 @@
 /**
  * dsh-session-archive - host half.
- * Subclass WorkspaceRegistry untuk menambahkan `unarchiveSession` (seam resmi
- * dsh TIDAK punya unarchive) + satu route HTTP:
+ * Subclass WorkspaceRegistry yang memakai `unarchiveSession` bawaan DSH 0.2
+ * + satu route HTTP untuk halaman arsip kustom:
  *   POST /plugins/dsh-session-archive/api/unarchive  { sessionId } →
  *     200 { archivedSessionIds } | 400 invalid-body/json | 413 body-too-large | 500
  *
@@ -22,16 +22,6 @@ const API_PREFIX = '/plugins/dsh-session-archive/api'
 const BODY_MAX_BYTES = 4 * 1024
 const SESSION_ID_MAX = 200
 
-/**
- * Member parent yang `private` di .d.ts (requireState/setState/enqueueOperation)
- * — runtime-nya metode biasa; cast tipe lokal, pola komunitas (lib JS-nya).
- */
-interface RegistryInternals {
-  requireState(): { archivedSessionIds: readonly string[] } & Record<string, unknown>
-  setState(state: Record<string, unknown>): Promise<void>
-  enqueueOperation<T>(fn: () => Promise<T>): Promise<T>
-}
-
 export default class SessionArchiveWorkspaceRegistry extends WorkspaceRegistry {
   // Wajib restate inject parent (static field di-shadow, bukan merge) + webServer.
   static inject = ['storageDomain', 'sessionPersistence', 'webServer']
@@ -43,23 +33,6 @@ export default class SessionArchiveWorkspaceRegistry extends WorkspaceRegistry {
       path: API_PREFIX + '/unarchive',
       handler: (req, res) => { void this.handleUnarchive(req, res) },
     }))
-  }
-
-  /**
-   * Unarchive satu sesi — idempoten (cermin archiveSession parent). Bila id
-   * tidak ada di archive set, resolve tanpa menulis (route HTTP butuh retry-safe).
-   */
-  unarchiveSession(sessionId: string): Promise<void> {
-    const internals = this as unknown as RegistryInternals
-    return internals.enqueueOperation(async () => {
-      const state = internals.requireState()
-      const ids = state.archivedSessionIds
-      if (!ids.includes(sessionId)) return
-      await internals.setState({
-        ...state,
-        archivedSessionIds: ids.filter((id) => id !== sessionId),
-      })
-    })
   }
 
   private async handleUnarchive(req: IncomingMessage, res: ServerResponse): Promise<void> {

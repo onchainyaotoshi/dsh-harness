@@ -31,17 +31,21 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-runtime"
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-client-ui-settings"
       ]
     }
   },
   "peerDependencies": {
     "react": "^18.2.0",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-workspace": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6"
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-workspace": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-workspace-controller": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.2"
   },
   "license": "Apache-2.0"
 }

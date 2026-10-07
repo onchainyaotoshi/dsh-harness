@@ -36,10 +36,10 @@
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ISessions, SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions, SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 
 export const name = 'file-explorer'
-export const inject = ['slots', 'sessions', 'layout']
+export const inject = ['slots', 'sessions', 'sidebarRight', 'sidebarRightTabs']
 
 const API = '/plugins/dsh-file-explorer/api'
 
@@ -160,7 +160,7 @@ const PANEL_CSS = `
 `
 
 /* ---------- panel (kolom details layout, bukan overlay) ---------- */
-function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => void }): React.ReactElement {
+function FileExplorerPanel(props: { sessionId?: string; sessions?: ISessions; closeDetails?: () => void }): React.ReactElement {
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([])
   const [workspaceId, setWorkspaceId] = useState('')
   const [cwd, setCwd] = useState('')
@@ -179,8 +179,8 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
 
   // Sesi aktif + cwd canonical-nya (SnapshotStore kompatibel useSyncExternalStore).
   const list = props.sessions?.list ?? NO_LIST
-  const listSnapshot = useSyncExternalStore(list.subscribe, list.getSnapshot)
-  const currentId = listSnapshot.current
+  const listSnapshot = useSyncExternalStore((cb) => list.subscribe(cb), () => list.getSnapshot())
+  const currentId = props.sessionId
   const currentCwd = currentId === undefined ? undefined : listSnapshot.byId?.[currentId]?.cwd
 
   useEffect(() => {
@@ -334,25 +334,11 @@ function FileExplorerPanel(props: { sessions?: ISessions; closeDetails?: () => v
 }
 
 /* ---------- tombol di header sesi (kanan atas, di samping session log) ---------- */
-/**
- * TOGGLE: klik pertama buka panel, klik berikutnya menutup. Sumber kebenaran
- * status = geometri DOM, BUKAN state mirror: konten seat `details` tetap
- * ter-mount walau kolom diciutkan (grid 0px — AppFrame selalu merender slot,
- * diverifikasi di bundle dsh-client-ui-layout 0.1.1-rc.1), jadi
- * `.dshfe-panel`.clientWidth > 0 = panel benar-benar terlihat. Mirror state
- * sendiri pasti desinkron karena ui-layout mem-close details OTOMATIS tiap
- * pindah sesi (useLayoutEffect AppFrame) di luar kendali plugin ini.
- */
-function FilesHeaderAction(props: { openDetails?: () => void; closeDetails?: () => void }): React.ReactElement {
-  const onClick = () => {
-    const el = document.querySelector('.dshfe-panel')
-    const isOpen = el !== null && el.clientWidth > 0
-    if (isOpen) props.closeDetails?.()
-    else props.openDetails?.()
-  }
+/** Toggle the registered tab through DSH's public right-panel controller. */
+function FilesHeaderAction(props: { toggle(): void }): React.ReactElement {
   return (
     <button className="dshfe-toggle-btn" title="File explorer" aria-label="File explorer"
-      onClick={onClick}>
+      onClick={props.toggle}>
       <FolderIcon color="inherit" />
     </button>
   )
@@ -361,16 +347,18 @@ function FilesHeaderAction(props: { openDetails?: () => void; closeDetails?: () 
 /* ---------- registrasi ---------- */
 export function apply(ctx: Context): void {
   const sessions = (ctx as unknown as { sessions?: ISessions }).sessions
-  const layout = (ctx as unknown as {
-    layout?: { openDetails(): void; closeDetails(): void }
-  }).layout
-
-  // layout actions bisa belum "wired" sebelum root entry mount — jangan
-  // biarkan error itu membunuh render panel. Satu-satunya pemicu buka/tutup
-  // = klik pengguna (tombol Files / tombol X); ui-layout boleh saja
-  // menutup sendiri saat pindah sesi — tidak ada yang dibukakan ulang.
-  const openPanel = () => { try { layout?.openDetails() } catch { /* belum wired */ } }
-  const closePanel = () => { try { layout?.closeDetails() } catch { /* belum wired */ } }
+  const { sidebarRight, sidebarRightTabs } = ctx as unknown as {
+    sidebarRight: { openTab(kind: string): void; close(id: string): void; active(): { id: string; kind: string } | undefined; isExpanded(): boolean }
+    sidebarRightTabs: { register(spec: unknown): () => void }
+  }
+  ctx.effect(() => sidebarRightTabs.register({
+    id: 'dsh-file-explorer', kind: 'dsh-file-explorer', title: () => 'File explorer',
+  }))
+  const togglePanel = () => {
+    const active = sidebarRight.active()
+    if (active?.kind === 'dsh-file-explorer' && sidebarRight.isExpanded()) sidebarRight.close(active.id)
+    else sidebarRight.openTab('dsh-file-explorer')
+  }
 
   // Stylesheet scoped + disposable: hover/focus butuh pseudo-class yang
   // tidak bisa dinyatakan di inline style; dibuang saat plugin unload.
@@ -393,20 +381,15 @@ export function apply(ctx: Context): void {
       register(spec: unknown, component: unknown): void
     }
   }
-  // Seat "details" (kolom kanan layout): menggantikan panel tool-details
-  // bawaan — kolom beneran yang memakan layout (keputusan pemilik repo).
-  // Slot single TIDAK boleh register di priority yang sama dengan occupant
-  // (default 0 → throw "already has a registration at priority 0"); shadow
-  // wajib priority LEBIH RENDAH (lowest renders) → -1.
-  slots.slots.inject('details', () => slots.slots.register(
-    { name: 'details', priority: -1, inject: () => ({ sessions, closeDetails: closePanel }) },
-    FileExplorerPanel,
+  slots.slots.inject('sidebar.right.pane.tab', () => slots.slots.register(
+    { name: 'sidebar.right.pane.tab', key: 'dsh-file-explorer', inject: () => ({ sessions }) },
+    (props: { sessionId?: string; useTabInfo(): { tab: { actions: { close(): void } } } }) => {
+      const info = props.useTabInfo()
+      return <FileExplorerPanel sessions={sessions} sessionId={props.sessionId} closeDetails={() => info.tab.actions.close()} />
+    },
   ))
-  // Slot ber-kind 'list' WAJIB options.id (identitas entry di ledger list).
-  // order 1: occupant bawaan "session-log-download" pakai order default 0,
-  // render ascending → tombol Files tampil di sebelah KANAN tombol session log.
   slots.slots.inject('conversation.session.header.utilities', () => slots.slots.register(
-    { name: 'conversation.session.header.utilities', id: 'file-explorer-toggle', order: 1, inject: () => ({ openDetails: openPanel, closeDetails: closePanel }) },
+    { name: 'conversation.session.header.utilities', id: 'file-explorer-toggle', order: 1, inject: () => ({ toggle: togglePanel }) },
     FilesHeaderAction,
   ))
 }

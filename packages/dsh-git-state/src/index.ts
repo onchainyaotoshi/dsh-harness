@@ -124,7 +124,8 @@ async function runCmd(ctx: Context, workdir: string, command: string): Promise<R
     stdoutMaxBytes: STDOUT_MAX_BYTES,
   }
   const spec = ctx.shell.resolve(req)
-  const result = await ctx.shell.run(spec)
+  const execution = await ctx.shell.execute(spec)
+  const result = await execution.result()
   return {
     ok: result.exitCode === 0 && !result.timedOut && !result.aborted,
     text: result.stdout.text,

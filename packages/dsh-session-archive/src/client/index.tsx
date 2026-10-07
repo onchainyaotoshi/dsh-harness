@@ -63,8 +63,8 @@ const CSS = `
 
 function ArchivedSessionsSection(props: { workspaces: WsFace; sessions: SessionsFace }): ReactElement {
   const { workspaces, sessions } = props
-  const ws = useSyncExternalStore(workspaces.list.subscribe, workspaces.list.getSnapshot)
-  const ss = useSyncExternalStore(sessions.list.subscribe, sessions.list.getSnapshot)
+  const ws = useSyncExternalStore((cb) => workspaces.list.subscribe(cb), () => workspaces.list.getSnapshot())
+  const ss = useSyncExternalStore((cb) => sessions.list.subscribe(cb), () => sessions.list.getSnapshot())
   const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [errorId, setErrorId] = useState<string | null>(null)

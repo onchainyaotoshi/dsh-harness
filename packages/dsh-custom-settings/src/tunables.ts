@@ -46,13 +46,13 @@ export interface Tunable {
    * half plugin lain yang mem-bind namespace ini sendiri (apply host no-op).
    */
   consumer?: 'host' | 'browser'
-  /** Baca nilai ter-apply utk GET /api/status. Default: codeRuntime.config[configKey ?? id]. */
+  /** Baca nilai ter-apply utk GET /api/status. Default: ptcRuntime.config[configKey ?? id]. */
   readApplied?(ctx: Context): number | undefined
   /** Terapkan nilai ke runtime. Dipanggil saat boot & setiap nilai berubah. */
   apply(ctx: Context, value: number): void
 }
 
-/** Face service codeRuntime (loose — kebenaran runtime ada di dsh). */
+/** Face service ptcRuntime (loose — kebenaran runtime ada di dsh). */
 interface CodeRuntimeLike {
   config?: Record<string, unknown>
 }
@@ -78,11 +78,11 @@ function sharedApplied(ctx: Context): CustomSettingsApplied | undefined {
 export const TUNABLES: Tunable[] = [
   {
     id: 'runCodeMaxWallMs',
-    configKey: 'maxWallMs',
-    label: 'Batas waktu run_code (maxWallMs)',
+    configKey: 'maxTimeoutMs',
+    label: 'Batas waktu run_code (maxTimeoutMs)',
     description: 'Berapa lama satu eksekusi run_code boleh berjalan sebelum dihentikan.',
     tooltip:
-      'Di preset code, exit_plan_mode berjalan di dalam run_code dan batas ini ikut menghitung waktu kamu membaca plan. Default dsh 600.000 ms (10 menit): lebih dari itu run dibunuh dan approval hangus. Naikkan agar membaca plan tidak terpotong. Berlaku langsung ke run berikutnya, tanpa restart. Berlaku juga untuk semua eksekusi run_code lain.',
+      'Batas maksimum timeout yang dapat diminta eksekusi PTC. Berlaku untuk panggilan berikutnya. Timeout default runtime tetap mengikuti pengaturan bawaan DSH.',
     min: 1,
     max: MAX_TIMER_DELAY_MS,
     default: 3_600_000,
@@ -96,14 +96,14 @@ export const TUNABLES: Tunable[] = [
     apply(ctx, value) {
       // cordis TIDAK membekukan config plugin (diverifikasi rc.7): mutasi
       // object config ini langsung dipakai run berikutnya
-      // (setTimeout(..., this.config.maxWallMs) di setiap run()).
+      // (setTimeout(..., this.config.maxTimeoutMs) di setiap run()).
       const runtime = (ctx as unknown as { get<T>(key: string): T | undefined })
-        .get<CodeRuntimeLike>('codeRuntime')
-      if (runtime?.config) runtime.config.maxWallMs = Math.round(value)    },
+        .get<CodeRuntimeLike>('ptcRuntime')
+      if (runtime?.config) runtime.config.maxTimeoutMs = Math.round(value)    },
   },
   {
     // Konsumen: BROWSER half dsh-git-state (bind namespace 'custom-settings'
-    // sendiri via settingsScope.bind + subscribe). Tidak ada state host yang
+    // sendiri via configForms.get + subscribe). Tidak ada state host yang
     // perlu dimutasi — apply sengaja no-op; persistensi & form tetap di sini.
     id: 'gitStatePollMs',
     label: 'Interval auto-refresh Git State',
@@ -134,8 +134,8 @@ export const TUNABLES: Tunable[] = [
     // badge "Aktif" di tab Custom Settings berfungsi (ditambahkan 25 Aug 2026).
     readApplied(ctx) {
       const settings = (ctx as unknown as { get<T>(key: string): T | undefined })
-        .get<{ get?(ns: string): Record<string, number> | undefined }>('settings')
-      return settings?.get?.('custom-settings')?.gitStatePollMs
+        .get<{ describe(): Array<{ ns: string; value: Record<string, number> }> }>('settings')
+      return settings?.describe().find((row) => row.ns === 'custom-settings')?.value?.gitStatePollMs
     },
   },
   {
@@ -175,8 +175,8 @@ export const TUNABLES: Tunable[] = [
       // di sini tidak bergantung urutan apply boot (pelajaran 25 Aug 2026 —
       // status menampilkan 6000 setelah restart padahal dokumen berisi 300000).
       const settings = (ctx as unknown as { get<T>(key: string): T | undefined })
-        .get<{ get?(ns: string): Record<string, number> | undefined }>('settings')
-      return settings?.get?.('custom-settings')?.gitStateCmdTimeoutMs
+        .get<{ describe(): Array<{ ns: string; value: Record<string, number> }> }>('settings')
+      return settings?.describe().find((row) => row.ns === 'custom-settings')?.value?.gitStateCmdTimeoutMs
     },
   },
 ]

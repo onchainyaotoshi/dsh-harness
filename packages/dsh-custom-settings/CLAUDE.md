@@ -194,3 +194,18 @@ curl -sS -X POST http://127.0.0.1:3080/plugins/dsh-custom-settings/api/upgrade  
 # UI: Settings → Custom Settings (paling bawah); ubah nilai → status "Aktif" berubah
 # tanpa restart; cek versi → "Sudah terbaru". E2E upgrade hanya saat versi baru terbit.
 ```
+
+## Migrasi 7 Oct 2026 — DSH 0.2.0-rc.2
+
+DSH 0.2 menghapus `settings.register/get` dan
+`settingsScope.bind`. Host mengekspor `Config`, setiap field editable wajib
+`.volatile()`; tanpa itu tab terlihat tetapi namespace form unavailable dan
+save ditolak. Host membaca `settings.describe()` dan event
+`settings/document-updated`, browser memakai `configForms.get(entryId)`.
+Mutasi tetap `settings.mutate` pada id entry `custom-settings`.
+Runtime kini `ptcRuntime.config.maxTimeoutMs` (batas maksimum request,
+bukan timeout default). Nilai lama mungkin tertinggal di
+`settings.yaml.imported` saat upgrade dengan plugin disabled; pulihkan hanya
+namespace ini ke `cordis.patch.yml` profil, jangan timpa config lain.
+Status ketiga tunable diverifikasi lewat route dan browser; tes mock mencakup
+save dan volatile schema. Versi peer Schemastery minimal 3.18.4.

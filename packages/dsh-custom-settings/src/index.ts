@@ -44,16 +44,10 @@ const NS = 'custom-settings'
 
 /* ---------------- face layanan (loose — kebenaran runtime ada di dsh) ---------------- */
 
-interface SettingsScope {
-  get(): Record<string, unknown>
-  watch(callback: () => void): () => void
-}
 interface SettingsFace {
-  register(ns: string, schema: unknown, options?: unknown): SettingsScope
-  /** Path-addressed edit tanpa revision fence (dibaca fresh dari dokumen). */
+  describe(): Array<{ ns: string; value: Record<string, unknown> }>
+  configure(presentation: { auto: boolean }): () => void
   mutate(ns: string, ops: Array<{ op: 'set' | 'unset'; path: string[]; value?: unknown }>, expectedRevision?: number): Promise<unknown>
-  /** Resolved value satu namespace (sudah di-resolve schema: default terisi). */
-  get?(ns: string): Record<string, unknown> | undefined
 }
 interface WebServerRoute {
   kind: 'exact'
@@ -223,7 +217,11 @@ function scheduleRestart(): void {
 
 /* ---------------- plugin ---------------- */
 
-export function apply(ctx: Context): void {
+const fields: Record<string, unknown> = {}
+for (const t of TUNABLES) fields[t.id] = z.number().min(t.min).max(t.max).default(t.default).volatile()
+export const Config = z.object(fields)
+
+export function apply(ctx: Context, config: Record<string, number>): void {
   const settings = (ctx as unknown as { settings: SettingsFace }).settings
   const webServer = (ctx as unknown as { webServer: WebServerFace }).webServer
 
@@ -235,37 +233,17 @@ export function apply(ctx: Context): void {
   const provide = (ctx as unknown as ProvideFace).provide.bind(ctx)
   ctx.effect(() => provide('customSettingsApplied', appliedShared))
 
-  /* ---- namespace settings + apply live (boot & setiap perubahan) ---- */
-  const fields: Record<string, unknown> = {}
-  for (const t of TUNABLES) {
-    fields[t.id] = z.number().min(t.min).max(t.max).default(t.default)
-  }
-  const scope = settings.register(NS, z.object(fields))
-
-  // Seed objek bersama dari resolved namespace, BUKAN dari defaultOf:
-  // seeding berbasis urutan apply pernah terobservasi tertinggal saat boot
-  // (pelajaran 25 Aug 2026 — status 6000 setelah restart padahal dokumen
-  // berisi 300000, sampai perubahan nilai pertama memicu re-apply).
-  const resolvedNow = (scope.get() as Record<string, unknown> | undefined)?.['gitStateCmdTimeoutMs']
-  if (typeof resolvedNow === 'number' && Number.isFinite(resolvedNow)) {
-    appliedShared.gitState!.cmdTimeoutMs = Math.round(resolvedNow)
-  }
-
+  // DSH 0.2 derives forms from each Loader entry's Config.
+  ctx.effect(() => settings.configure({ auto: false }))
   const applyAll = (): void => {
-    const value = scope.get()
+    const value = settings.describe().find((row) => row.ns === NS)?.value ?? config
     for (const t of TUNABLES) {
-      const n = (value as Record<string, unknown> | undefined)?.[t.id]
-      if (typeof n === 'number' && Number.isFinite(n)) {
-        try {
-          t.apply(ctx, n)
-        } catch {
-          /* jangan gagalkan boot/observer karena satu tunable */
-        }
-      }
+      const n = value[t.id]
+      if (typeof n === 'number' && Number.isFinite(n)) t.apply(ctx, n)
     }
   }
   applyAll()
-  ctx.effect(() => scope.watch(applyAll))
+  ctx.on('settings/document-updated' as never, applyAll)
 
   /* ---- helper status ---- */
   // Nilai ter-apply per tunable: baca dari konsumennya masing-masing —
@@ -274,7 +252,7 @@ export function apply(ctx: Context): void {
   // browser) sekadar tidak ada di map.
   const appliedValues = (): Record<string, number> => {
     const runtime = (ctx as unknown as { get<T>(key: string): T | undefined })
-      .get<{ config?: Record<string, unknown> }>('codeRuntime')
+      .get<{ config?: Record<string, unknown> }>('ptcRuntime')
     const out: Record<string, number> = {}
     for (const t of TUNABLES) {
       let n: number | undefined
@@ -333,6 +311,7 @@ export function apply(ctx: Context): void {
         }
         if (body?.reset === true) {
           await settings.mutate(NS, [{ op: 'unset', path: [id] }])
+          applyAll()
           sendJson(res, 200, { ok: true, applied: appliedValues() })
           return
         }
@@ -343,6 +322,7 @@ export function apply(ctx: Context): void {
         }
         const value = Math.min(tunable.max, Math.max(tunable.min, Math.round(raw)))
         await settings.mutate(NS, [{ op: 'set', path: [id], value }])
+        applyAll()
         sendJson(res, 200, { ok: true, applied: appliedValues() })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)

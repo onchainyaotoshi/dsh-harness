@@ -177,3 +177,14 @@ curl -sS http://127.0.0.1:3080/plugins/dsh-file-explorer/api/workspaces    # JSO
 
 Iterasi UI: `pnpm watch` + refresh browser (produksi tanpa HMR — endpoint
 no-cache).
+
+## Migrasi 7 Oct 2026 — DSH 0.2.0-rc.2
+
+DSH 0.2 mengganti seat `details`/`layout.openDetails` dengan tab
+`sidebar.right.pane.tab`, registri `sidebarRightTabs`, dan controller
+`sidebarRight`. Panel kustom sekarang tab bernama `dsh-file-explorer`;
+launcher memakai `active/isExpanded/openTab/close`, tombol X memakai
+`useTabInfo().tab.actions.close()`. Jangan membaca status dari geometri DOM.
+Sesi aktif datang dari prop slot `sessionId`; `sessions.list` hanya katalog.
+Method ObservableSnapshot wajib dibungkus arrow agar receiver tidak hilang.
+Containment `fs.contains` tetap wajib dan diuji dengan mock sebelum akses file.

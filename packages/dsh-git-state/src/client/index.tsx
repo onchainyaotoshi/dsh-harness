@@ -10,7 +10,7 @@
  * workspace.path); override manual lewat tab workspace bertahan sampai sesi
  * berganti. Poll otomatis default 30 dtk — interval bisa diatur live dari tab
  * Custom Settings (dsh-custom-settings, namespace 'custom-settings', field
- * gitStatePollMs) via settingsScope.bind; plugin absen → fallback default.
+ * gitStatePollMs) via configForms.bind; plugin absen → fallback default.
  * Tombol refresh manual tetap.
  *
  * Styling: WAJIB token --dsw-* (theme-aware) + pola shell repo (row radius 8px
@@ -19,25 +19,25 @@
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ISessions, SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions, SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 
 export const name = 'git-state'
-// settingsScope: sumber tunable gitStatePollMs (namespace custom-settings).
+// configForms: sumber tunable gitStatePollMs (namespace custom-settings).
 // WAJIB dideklarasi di sini — loader client menolak akses properti ctx yang
 // tidak ada di inject ("cannot get property ... without inject").
-export const inject = ['slots', 'sessions', 'settingsScope']
+export const inject = ['slots', 'sessions', 'configForms']
 
 const API = '/plugins/dsh-git-state/api/state'
 // Interval poll: field gitStatePollMs di namespace 'custom-settings' (tab
 // Custom Settings), LIVE mengikuti perubahan nilai (subscribe scope → interval
 // dibuat ulang). Fallback default saat plugin settings absen/field kosong.
-// Clamp GANDA di konsumen (schema sudah min/max) karena ~/.dsh/settings.yaml
+// Clamp GANDA di konsumen (schema sudah min/max) karena profil DSH aktif
 // bisa diedit manual di luar UI.
 const DEFAULT_POLL_MS = 30_000
 const POLL_MIN_MS = 10_000
 const POLL_MAX_MS = 86_400_000
 
-/* ---------- face settingsScope (loose — pola dsh-custom-settings) ---------- */
+/* ---------- face configForms (loose — pola dsh-custom-settings) ---------- */
 interface ScopeSnapshot {
   status: 'loading' | 'ready' | 'unavailable'
   value?: Record<string, number>
@@ -47,7 +47,7 @@ interface ScopeLike {
   subscribe(cb: () => void): () => void
 }
 interface SettingsScopeFace {
-  bind(spec: { namespace: string }): ScopeLike
+  get(entryId: string): ScopeLike
 }
 const EMPTY_SNAPSHOT: ScopeSnapshot = { status: 'unavailable' }
 /** Scope fallback konstan: hook TIDAK boleh kondisional. */
@@ -237,7 +237,7 @@ const PANEL_CSS = `
 `
 
 /* ---------- komponen utama ---------- */
-function GitStateDock(props: { sessions?: ISessions; pollScope?: ScopeLike }): React.ReactElement {
+function GitStateDock(props: { sessionId?: string; sessions?: ISessions; pollScope?: ScopeLike }): React.ReactElement {
   const [data, setData] = useState<WorkspaceState[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState('')
@@ -248,8 +248,8 @@ function GitStateDock(props: { sessions?: ISessions; pollScope?: ScopeLike }): R
 
   // Sesi aktif + cwd canonical (SnapshotStore kompatibel useSyncExternalStore).
   const list = props.sessions?.list ?? NO_LIST
-  const snap = useSyncExternalStore(list.subscribe, list.getSnapshot)
-  const currentId = snap.current
+  const snap = useSyncExternalStore((cb) => list.subscribe(cb), () => list.getSnapshot())
+  const currentId = props.sessionId
   const currentCwd = currentId === undefined ? undefined : snap.byId?.[currentId]?.cwd
   const currentIdRef = useRef<string | undefined>(undefined)
   currentIdRef.current = currentId
@@ -491,13 +491,13 @@ function GitStateDock(props: { sessions?: ISessions; pollScope?: ScopeLike }): R
 export function apply(ctx: Context): void {
   const ctxAny = ctx as unknown as {
     sessions?: ISessions
-    settingsScope?: SettingsScopeFace
+    configForms?: SettingsScopeFace
   }
   const sessions = ctxAny.sessions
   // Namespace Custom Settings (dsh-custom-settings): sumber gitStatePollMs.
   // Bind sekali di apply (bukan per render); absen → degrade halus ke default.
-  const settingsScope = ctxAny.settingsScope
-  const pollScope = settingsScope ? settingsScope.bind({ namespace: 'custom-settings' }) : undefined
+  const configForms = ctxAny.configForms
+  const pollScope = configForms ? configForms.get('custom-settings') : undefined
 
   // Stylesheet scoped + disposable (pola dsh-file-explorer).
   ctx.effect(() => {

@@ -211,3 +211,12 @@ origin/... ...HEAD`, `gh pr list`. Iterasi UI: `pnpm watch` + refresh browser
 (produksi tanpa HMR — endpoint no-cache).
 
 Mockup desain (pratinjau statis interaktif): `design/ui-preview.html`.
+
+## Migrasi 7 Oct 2026 — DSH 0.2.0-rc.2
+
+DSH 0.2 menghapus `shell.run`: gunakan
+`await shell.execute(spec)`, lalu `await execution.result()`. Salah API
+menghasilkan repo:null meskipun direktori adalah repo Git. UI sesi aktif
+memakai prop slot `sessionId`, tipe dari `dsh-api-session-controller/client`.
+Pengaturan berasal dari `configForms.get('custom-settings')`; SnapshotStore
+methods dibungkus arrow. Tes mock memastikan kegagalan shell tetap diteruskan.

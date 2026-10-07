@@ -121,3 +121,37 @@ dsh --profile web --dump-config | grep -A3 'patches'     # row hadir
 #   - hapus ~/.dsh/profiles/web/patches/dsh-claude-compat.patch + entri
 #     patchedDependencies di pnpm-lock.yaml
 ```
+
+## Migrasi 7 Oct 2026 — DSH 0.2.0-rc.2
+
+DSH 0.2 memiliki heartbeat sendiri di `dsh-api-gateway`
+dan tidak lagi memiliki paket `dsh-client-runtime`; kedua patch WS 0.1
+sudah dipensiunkan. Patch aktif menangani fallback direktori Claude,
+admission metadata sumber Claude lama, serta producer pesan Claude native.
+Nama mode tool berubah `code` → `ptc`; jangan mengasumsikan nama/argumen tool
+lama tetap berlaku setelah upgrade. Verifikasi marker patch terpisah dari
+hasil boot browser.
+
+## History lama setelah upgrade 7 Oct 2026
+
+Log v0 bisa berisi source `{kind: "claude-compat", form: "rules"}` hasil
+backport plugin. Migrator v2→v3 punya allowlist producer lama yang belum
+memuat shape ini. Patch `session-legacy-claude-source` mengizinkan HANYA
+kind tersebut, form rules/hook-context, dan tepat dua key; metadata tambahan
+yang mungkin berisi koordinat tetap ditolak. Migrasi v3→v4 mempertahankan
+source direct tersebut. Jangan menonaktifkan validasi semua source/event
+dan jangan menghapus pesan atau mengganti identitas sesi.
+
+`dsh-claude-compat@0.8.3` masih mengeluarkan wrapper plugin lama meski peers
+bertanda wildcard. Patch rules/hook source menggunakan kind claude-compat
+yang native di v4. Dedupe rules mengenali bentuk legacy, direct, dan
+plugin-prefixed hasil migrasi. Compatibility gate bukan bukti perilaku API.
+
+Paket format internal tidak tersedia langsung di profile resolver; resolve
+melalui paket pemilik dsh-session. Jalankan CLI patch sebelum restart agar
+module yang sudah diimport tidak memakai fungsi migrator lama.
+
+Verifikasi history harus menunggu loading history selesai, bukan hanya
+header/slot plugin siap. Tes offline memakai catalog resmi, recovery strict
+dan validation current; bandingkan isi SEMUA pesan sebelum/sesudah migrasi.
+Backup raw log dulu. Artefak/titel/path privat hanya dicatat di deploy lokal.
