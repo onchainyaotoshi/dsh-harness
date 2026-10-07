@@ -5,11 +5,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yhlooo/dsh-bridges.git"
+    "url": "git+https://github.com/onchainyaotoshi/dsh-harness.git",
+    "directory": "packages/dsh-bridges"
   },
-  "homepage": "https://github.com/yhlooo/dsh-bridges#readme",
+  "homepage": "https://github.com/onchainyaotoshi/dsh-harness/tree/master/packages/dsh-bridges#readme",
   "bugs": {
-    "url": "https://github.com/yhlooo/dsh-bridges/issues"
+    "url": "https://github.com/onchainyaotoshi/dsh-harness/issues"
   },
   "keywords": [
     "dsh",

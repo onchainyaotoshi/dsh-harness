@@ -23,6 +23,11 @@ modul upstream dan memungkinkan pemeriksaan tipe seluruh seam.
   MessageSourceMap, menggantikan catch-all `plugin` yang dihapus core.
 - Hook Stop wajib awaited pada serial turn-stopping; fire-and-forget
   kehilangan continuation karena turn sudah ditutup.
+- Nama npm `dsh-bridges` sudah dipakai upstream (yhlooo, 0.3.0), jadi paket ini
+  TIDAK untuk diterbitkan: distribusinya lewat
+  `dsh plugin --profile web add ./packages/dsh-bridges`. Metadata
+  `repository`/`homepage`/`bugs` diarahkan ke repo monorepo ini (direktori
+  packages/dsh-bridges); `author` tetap yhlooo sebagai atribusi Apache-2.0.
 
 ## Verifikasi
 

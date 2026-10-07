@@ -155,8 +155,13 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
 - Versi dsh target: 0.1.0-rc.6 — seam yang dipakai tiap paket diverifikasi di
   versi ini (daftar lengkap per paket di CLAUDE.md paket masing-masing); kalau
   dsh di-upgrade, cek ulang seam-nya dulu.
-- Publish: build dulu, lalu pnpm --filter <paket> publish --access public.
-  User lain: dsh plugin --profile web add <nama> + restart.
+- **Publish: repo ini TIDAK menerbitkan paket ke npm** (keputusan pemilik, 7 Oct
+  2026). Tiga nama sudah dipakai pihak lain di registri — `dsh-bridges`
+  (yhlooo, upstream), `dsh-file-explorer` (sanguing), `dsh-session-archive`
+  (meowyuho) — jadi `pnpm publish` akan ditolak. Distribusi lewat path lokal:
+  `dsh plugin --profile web add ./packages/<nama>` + restart. Kalau suatu hari
+  mau menerbitkan, cek `npm view <nama>` dulu dan pakai scope
+  `@onchainyaotoshi/*`.
 - **CI & rilis (28 Aug 2026)**: `.github/workflows/` — `gitleaks.yml`
   (gerbang WAJIB di push/PR ke master: scan secret history+tree, merah kalau
   ada), `auto-release.yml` (push ke master → build harus lulus → tag semver +
@@ -165,6 +170,14 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
   = checkout tag/release terakhir. Aturan privasi tetap berlaku SEPERTI
   SEBELUMNYA — gitleaks membantu, TIDAK menggantikan audit manual
   (grep + git log) sebelum push.
+  - **Pelajaran 7 Oct 2026 — jangan menebak bump rilis.** `git tag -l` di clone
+    lokal bisa KOSONG padahal tag sudah ada di remote (belum pernah di-fetch):
+    jalankan `git fetch --tags` lebih dulu. Push 7 Oct 2026 sempat menerbitkan
+    tag v1.0.0 (bump major dari commit `feat!`) padahal maksudnya v0.2.0.
+    Rollback: `gh release delete <tag> --yes --cleanup-tag` (flag ini ikut
+    menghapus tag LOKAL) → `git tag v0.2.0 <sha>` → `git push origin v0.2.0` →
+    `gh release create v0.2.0 --verify-tag`. Push tag TIDAK memicu
+    auto-release — workflow hanya dengar branch master.
 - **PRIVASI (wajib, pasca-insiden 15 Aug 2026): repo ini PUBLIK.** Jangan pernah
   menulis nama asli, email pribadi, path absolut (di luar repo), atau identitas VPS
   ke file repo ini — termasuk CLAUDE.md per paket. Identitas git = noreply
