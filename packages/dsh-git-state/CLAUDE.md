@@ -73,7 +73,7 @@ cordis.patch.yml      # layer: - insert: [{ id: git-state, name: dsh-git-state }
   (event dispatch tertanam di `tool/result`) tidak terbaca backfill — degradasi
   halus (fallback cwd/inUse/main), index live menutup gap ke depan. Kalau
   `sessionQuery` absen → backfill dilewati, index tetap jalan.
-- **Keamanan (warisan wajib dari file-explorer)**: route tidak ikut pagar
+- **Keamanan (aturan containment lintas paket)**: route tidak ikut pagar
   `/api`; satu-satunya pagar = hanya perintah read-only dengan path dari
   `workspaceRegistry` (client tidak pernah mengirim path). Jangan pernah
   tambah perintah tulis (commit/stash pop/checkout) tanpa konfirmasi pemilik.

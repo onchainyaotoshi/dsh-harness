@@ -17,10 +17,12 @@ Monorepo plugin DeepSeek Harness + artefak deploy. **Baca ini sebelum ngoding di
   dengan satu row name: <paket>) + dsh.client kalau ada UI
   (exports["./client"]). Satu row melayani host half DAN browser roster
   sekaligus.
-- **15 Aug 2026 — Security boundary file-explorer**: semua route API panel
-  wajib containment check dalam workspace terdaftar (ctx.fs.contains) — 403
-  di luar root. Boundary ini WARISAN wajib untuk plugin lain yang menyentuh
-  filesystem.
+- **15 Aug 2026 — Security boundary route filesystem (aturan umum, ditegaskan
+  ulang 10 Oct 2026 saat dsh-file-explorer dipensiunkan)**: setiap route API
+  yang menyentuh filesystem wajib containment check dalam workspace terdaftar
+  (ctx.fs.contains) — 403 di luar root — dan path TIDAK PERNAH datang dari
+  client. Berlaku untuk semua plugin lokal, bukan cuma panel file. ADR:
+  docs/decisions/2026-10-10-retire-file-explorer.md.
 
 ## Di mana dokumen berada
 
@@ -39,10 +41,9 @@ deploy/                  # artefak deploy dsh (dari repo deepseek-harness-deploy
   dsh-git-state-diagram/ # mockup diagram UI dsh-git-state
   CLAUDE.md              # catatan deploy privat (path abs/domain) — GITIGNORED, lokal saja
 packages/
-  file-explorer/          # panel tree file + viewer source code
-    src/index.ts          # host half (Node): route HTTP list/read/raw/workspaces
-    src/client/index.tsx  # browser half: seat details (kolom kanan) + conversation.session.header.utilities
-    cordis.patch.yml      # layer: - insert: [{ id: file-explorer, name: dsh-file-explorer }]
+  # file-explorer DIPENSIUNKAN 10 Oct 2026 — panel file kini native DSH 0.2
+  # (@deepseek-ai/dsh-client-ui-sidebar-files + dsh-api-workspace-files).
+  # Ilmunya dipindah ke bagian "Pelajaran UI plugin" di file ini.
   dsh-tunnel-loopback/    # paksa connection.isLoopback=true di client (tunnel/proxy)
     src/index.ts          # host half: marker + pemeriksa urutan komposisi
     src/client/index.ts   # browser half: flip isLoopback sebelum settings bind
@@ -134,8 +135,8 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
   materialisasi (kejadian nyata 15 Aug 2026). JANGAN dihapus.
 - **UI plugin wajib `ctx.slots.inject(...)`** (bukan register langsung di
   apply), **slot ber-kind `list` wajib `options.id`**, dan **wajib token
-  `--dsw-*`** (theme-aware). Detail + kejadian nyata:
-  `packages/file-explorer/CLAUDE.md`.
+  `--dsw-*`** (theme-aware). Detail + kejadian nyata: bagian "Pelajaran UI
+  plugin" di file ini (warisan dsh-file-explorer yang dipensiunkan).
 - **Skill `restart-dsh` kembar** (18 Aug 2026): `.dsh/skills/restart-dsh/SKILL.md`
   (dibaca DSH; terverifikasi live — watcher filesystem provider langsung
   publish ke katalog sesi) + `.claude/skills/restart-dsh/SKILL.md` (dibaca
@@ -144,9 +145,11 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
   `sudo -n systemctl` scope system (`systemctl --user` gagal di shell agent),
   verifikasi MainPID baru, sesi persist jadi aman, client-only = cukup build +
   refresh.
-- Tambah plugin baru: salin packages/file-explorer → ganti nama + isi →
-  otomatis masuk workspace (packages/*). WAJIB buat `CLAUDE.md` paket
-  (template di atas) dan perbarui bagian "Struktur" di file ini.
+- Tambah plugin baru: salin `packages/dsh-tunnel-loopback` (kerangka dual-half
+  paling ringkas) atau `packages/dsh-git-state` (contoh lengkap: route host +
+  slot UI + tes) → ganti nama + isi → otomatis masuk workspace (packages/*).
+  WAJIB buat `CLAUDE.md` paket (template di atas) dan perbarui bagian
+  "Struktur" di file ini.
 - Test di VPS: dsh plugin --profile web add ./packages/<nama> → verifikasi
   dsh --profile web --dump-config → restart dsh SEKALI di jeda antar turn
   (sesi persist, jangan restart saat ada agent lagi kerja).
@@ -156,9 +159,10 @@ Detail per plugin: `packages/*/CLAUDE.md` masing-masing.
   versi ini (daftar lengkap per paket di CLAUDE.md paket masing-masing); kalau
   dsh di-upgrade, cek ulang seam-nya dulu.
 - **Publish: repo ini TIDAK menerbitkan paket ke npm** (keputusan pemilik, 7 Oct
-  2026). Tiga nama sudah dipakai pihak lain di registri — `dsh-bridges`
-  (yhlooo, upstream), `dsh-file-explorer` (sanguing), `dsh-session-archive`
-  (meowyuho) — jadi `pnpm publish` akan ditolak. Distribusi lewat path lokal:
+  2026). Nama paket sudah dipakai pihak lain di registri — `dsh-bridges`
+  (yhlooo, upstream) dan `dsh-session-archive` (meowyuho); `dsh-file-explorer`
+  juga milik pihak lain (sanguing) dan paketnya dipensiunkan 10 Oct 2026 —
+  jadi `pnpm publish` akan ditolak. Distribusi lewat path lokal:
   `dsh plugin --profile web add ./packages/<nama>` + restart. Kalau suatu hari
   mau menerbitkan, cek `npm view <nama>` dulu dan pakai scope
   `@onchainyaotoshi/*`.
@@ -204,3 +208,44 @@ Periksa juga dependensi profil, bukan hanya binary global: salinan lama
 `dsh-user-approval`/`dsh-sandbox-policy` dari plugin pihak ketiga bisa menutupi
 komponen inti baru, membuat sessionController unavailable. Jangan mengakali
 compatibility gate dengan allow-version tanpa migrasi/verifikasi API.
+
+## Pelajaran UI plugin (warisan dsh-file-explorer, dipensiunkan 10 Oct 2026)
+
+Paket panel file itu sudah hilang — panel file kini native DSH 0.2
+(`dsh-client-ui-sidebar-files` + `dsh-api-workspace-files`) — tapi
+pelajarannya berlaku untuk SEMUA plugin UI lokal. Catatan panjang aslinya
+tersimpan di git history: `git show 11ab1df:packages/file-explorer/CLAUDE.md`.
+
+- **Register slot lewat `ctx.slots.inject(nama, () => ctx.slots.register(...))`**
+  — register langsung di `apply()` = race dengan deklarasi slot ui-layout →
+  error "slot is not declared" (kejadian 15 Aug 2026). Slot kind `list` WAJIB
+  `options.id`; slot kind `single` MENOLAK register di priority yang sama
+  (yang menang = priority TERENDAH) — kejadian 18 Aug 2026.
+- **Token `--dsw-*` wajib** (theme-aware): bg `--dsw-alias-bg-base/layer-1/2`,
+  border `--dsw-alias-border-l1/l2`, teks
+  `--dsw-alias-label-primary/secondary/tertiary`, hover
+  `--dsw-alias-interactive-bg-hover`, kode `--dsw-font-markdown-code-block`;
+  nilai referensi di `dsh-client-ui-theme/lib/styles/design-platform.css`.
+  Hover/focus TIDAK bisa lewat inline style → inject satu `<style>` scoped via
+  `ctx.effect` (return disposer yang menghapus elemen). JANGAN emoji sebagai
+  icon UI.
+- **Panel yang memakan layout pakai seat/kolom resmi, bukan `shell.overlay`**
+  (`position:absolute; inset:0` tidak bisa mendorong grid). Di 0.2: tab
+  `sidebar.right.pane.tab` + registri `sidebarRightTabs` + controller
+  `sidebarRight` (`active/isExpanded/openTab/close`, tombol X lewat
+  `useTabInfo().tab.actions.close()`). Jangan baca status buka/tutup dari
+  geometri DOM.
+- **Seat ber-scope sesi remount tiap pindah sesi** → JANGAN auto-open panel di
+  mount (keputusan pemilik 25 Aug 2026: panel selalu mulai tertutup; satu-satunya
+  pemicu = klik pengguna).
+- **Petakan `FsError.code` di route HTTP**: `FS_NOT_TEXT` → 415,
+  `FS_TOO_LARGE` → 413, `FS_NOT_FOUND` → 404, `FS_PERMISSION_DENIED` /
+  `FS_SANDBOX_DENIED` → 403 — jangan biarkan jadi 500 "internal-error".
+- **Deps array `useEffect` dibaca SAAT RENDER** — jangan referensikan
+  `useCallback` yang dideklarasikan DI BAWAHNYA (TDZ → seluruh slot entry
+  crash, kejadian 24 Aug 2026).
+- **Cwd sesi ≠ direktori kerja agent**: `sessions.list.byId[id].cwd` di-stempel
+  saat sesi dibuat dan tidak pernah berubah; `git worktree add` + `cd` adalah
+  workdir per-panggilan tool. Fitur follow-workdir pernah dibangun lalu DIHAPUS
+  (25 Aug 2026) karena sinyalnya cuma ada di sesi bridge Claude — jangan
+  bangun ulang tanpa sinyal level harness.

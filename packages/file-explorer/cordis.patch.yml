@@ -1,6 +1,0 @@
-# Layer bundle dsh-file-explorer — diterapkan setelah semua bundle sebelumnya.
-# Satu row ini sekaligus: host half (plugin Node: route API) DAN browser roster
-# (dsh.client → bundle di-serve di /plugins/dsh-file-explorer/client.js).
-- insert:
-    - id: file-explorer
-      name: dsh-file-explorer

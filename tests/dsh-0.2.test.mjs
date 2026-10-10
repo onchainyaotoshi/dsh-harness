@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import { EventEmitter } from 'node:events'
 import { apply as applyGit } from '../packages/dsh-git-state/lib/index.js'
-import { apply as applyFiles } from '../packages/file-explorer/lib/index.js'
 import { apply as applySettings, Config } from '../packages/dsh-custom-settings/lib/index.js'
 
 function context(services = {}) {
@@ -50,19 +49,6 @@ test('Git collector uses the DSH 0.2 execution handle and preserves failures', a
   assert.equal(executed, 1)
   assert.equal(res.statusCode, 200)
   assert.equal(res.body.workspaces[0].error, 'mock shell failure')
-})
-
-test('file routes retain containment before reading any target', async () => {
-  let reads = 0
-  const { ctx, routes } = context({
-    workspaceRegistry: { get: () => ({ path: '/mock/workspace' }), list: () => [] },
-    fs: { resolve: async (path) => path, contains: () => false, listDir: async () => { reads++; return [] } },
-  })
-  applyFiles(ctx)
-  const res = await request(routes, '/plugins/dsh-file-explorer/api/list?workspace=test&path=/mock/outside')
-  assert.equal(res.statusCode, 403)
-  assert.equal(res.body.error, 'outside-workspace')
-  assert.equal(reads, 0)
 })
 
 test('custom settings expose volatile fields and apply saved values through DSH 0.2', async () => {

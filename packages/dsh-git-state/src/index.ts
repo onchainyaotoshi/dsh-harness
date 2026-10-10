@@ -9,7 +9,8 @@
  * Path TIDAK PERNAH datang dari client; client hanya mengirim id workspace
  * (dan id sesi untuk deteksi aktivitas). Route ini tidak ikut pagar /api
  * (method PRIVILEGED), jadi containment workspaceRegistry adalah satu-satunya
- * pagar antara browser dan proses host (warisan wajib dsh-file-explorer).
+ * pagar antara browser dan proses host (aturan containment lintas paket;
+ * lihat docs/decisions/2026-10-10-retire-file-explorer.md).
  *
  * Deteksi "worktree aktif" (pelajaran 18 Aug 2026 - `git worktree list`
  * TIDAK menandai checkout yang sedang dipakai; blok pertama SELALU checkout
