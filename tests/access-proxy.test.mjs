@@ -145,7 +145,33 @@ test('proxy bridges Access into DSH for clean URL, POST, and WebSocket without e
   assert.equal(bootstraps, 2)
 })
 
-test('missing/forged Access, hostile origin, wrong host, and cross-site requests cannot reach DSH', async t => {
+test('OTP return navigation reaches the index with a valid Access JWT and preserves fetch metadata', async t => {
+  let forwarded = 0
+  const backend = http.createServer((req, res) => {
+    forwarded++
+    assert.equal(req.url, '/?session=fixture')
+    assert.equal(req.headers['sec-fetch-site'], 'cross-site')
+    assert.equal(req.headers.cookie, 'dsh-auth-fixture=value')
+    res.end('fixture HTML')
+  })
+  const port = await listen(backend, t)
+  const proxyPort = await listen(createProxy({ port, verifyAccess: verifier(), hostname,
+    getDshCookie: async () => 'dsh-auth-fixture=value' }), t)
+  const navigation = { host: hostname, 'cf-access-jwt-assertion': jwt(),
+    'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' }
+  const response = await request(proxyPort, '/?session=fixture', navigation)
+  assert.equal(response.status, 200)
+  assert.equal(response.body, 'fixture HTML')
+  for (const headers of [{ ...navigation, 'cf-access-jwt-assertion': undefined },
+    { ...navigation, 'cf-access-jwt-assertion': 'forged' }, { ...navigation, origin: 'https://evil.example' }]) {
+    // Node's HTTP client rejects undefined header values, so omit missing JWTs.
+    const supplied = Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== undefined))
+    assert.equal((await request(proxyPort, '/?session=fixture', supplied)).status, 403)
+  }
+  assert.equal(forwarded, 1)
+})
+
+test('missing/forged Access, hostile origin, wrong host, and unsafe cross-site requests cannot reach DSH', async t => {
   let backendRequests = 0, cookieRequests = 0
   const backend = http.createServer((req, res) => { backendRequests++; res.end('unreachable') })
   const backendPort = await listen(backend, t)
@@ -157,6 +183,14 @@ test('missing/forged Access, hostile origin, wrong host, and cross-site requests
     assert.equal((await request(proxyPort, '/', headers)).status, 403)
     assert.match(await upgrade(proxyPort, headers), /^HTTP\/1.1 403/)
   }
+  const navigation = { ...valid, 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' }
+  for (const [path, headers, method] of [
+    ['/', navigation, 'POST'],
+    ['/api/fixture', navigation, 'GET'],
+    ['/', { ...navigation, 'sec-fetch-mode': 'cors' }, 'GET'],
+    ['/', { ...navigation, 'sec-fetch-dest': 'iframe' }, 'GET'],
+  ]) assert.equal((await request(proxyPort, path, headers, method)).status, 403)
+  assert.match(await upgrade(proxyPort, navigation), /^HTTP\/1.1 403/)
   assert.equal(backendRequests, 0)
   assert.equal(cookieRequests, 0)
 })

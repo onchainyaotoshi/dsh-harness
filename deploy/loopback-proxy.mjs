@@ -9,19 +9,30 @@ import { createAccessVerifier, createDshSession } from './access-auth.mjs'
 
 export function createProxy({ port = 3080, verifyAccess, getDshCookie, hostname, log = false } = {}) {
   const authority = `127.0.0.1:${port}`
+  const rejected = (reason, status = 403) => {
+    // Fixed reason codes only: never log JWTs, cookies, claims or URLs.
+    if (log) console.warn(`Access request denied: ${reason}`)
+    return { status }
+  }
   async function headersFor(req) {
     const headers = { ...req.headers, host: authority }
     if (verifyAccess) {
-      if (req.headers.host !== hostname || req.headers['sec-fetch-site'] === 'cross-site') return { status: 403 }
-      if (req.headers.origin !== undefined && req.headers.origin !== `https://${hostname}`) return { status: 403 }
-      if (!await verifyAccess(req.headers['cf-access-jwt-assertion'])) return { status: 403 }
+      if (req.headers.host !== hostname) return rejected('host')
+      // Returning from the Access OTP page can be a cross-site navigation.
+      // Admit only a top-level GET of the index, never API calls or upgrades.
+      const indexNavigation = req.method === 'GET' && req.url?.split('?')[0] === '/' &&
+        req.headers['sec-fetch-mode'] === 'navigate' && req.headers['sec-fetch-dest'] === 'document' &&
+        req.headers.upgrade === undefined
+      if (req.headers['sec-fetch-site'] === 'cross-site' && !indexNavigation) return rejected('cross-site')
+      if (req.headers.origin !== undefined && req.headers.origin !== `https://${hostname}`) return rejected('origin')
+      if (!await verifyAccess(req.headers['cf-access-jwt-assertion'])) return rejected('jwt')
       try {
         const cookie = await getDshCookie()
         // Client-supplied DSH cookies cannot override the server-held session.
         const otherCookies = (headers.cookie ?? '').split(';').filter(c => !c.trim().startsWith('dsh-auth-')).map(c => c.trim()).filter(Boolean)
         headers.cookie = [...otherCookies, cookie].join('; ')
       } catch {
-        return { status: 503 }
+        return rejected('dsh-session', 503)
       }
       delete headers['cf-access-jwt-assertion']
       delete headers['cf-access-authenticated-user-email']

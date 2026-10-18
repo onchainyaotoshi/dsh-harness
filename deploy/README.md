@@ -22,7 +22,10 @@ Tanpa ketiganya, proxy mempertahankan login DSH manual.
 Saat aktif, setiap request HTTP dan handshake WebSocket wajib membawa JWT
 Access dengan signature RS256, issuer, audience aplikasi, type `app`, dan
 masa berlaku yang benar. Host/Origin harus sesuai domain publik; request
-cross-site ditolak. JWKS diambil hanya dari issuer yang dikonfigurasi dan
+cross-site ditolak kecuali navigasi dokumen utama `GET /` (query sesi boleh)
+setelah login OTP. Pengecualian ini tetap wajib JWT valid dan tidak berlaku
+untuk API, iframe, POST, atau WebSocket. Header fetch metadata diteruskan
+utuh agar pagar API DSH tetap bekerja. JWKS diambil hanya dari issuer yang dikonfigurasi dan
 di-cache lima menit. Jangan pernah melepas policy Access di Cloudflare.
 
 Setelah validasi, proxy mengambil URL peluncuran dari journal PID service
@@ -31,6 +34,8 @@ disimpan di memori proxy dan diperbarui paling lambat lima menit; token dan
 cookie itu tidak dikirim ke browser. Pengguna cukup membuka domain biasa.
 Service proxy perlu akses baca journal milik service DSH. Kegagalan validasi
 Access menghasilkan 403; kegagalan pertukaran DSH menghasilkan 503.
+Dengan `DSH_PROXY_LOG=1`, penolakan mencatat kode alasan tetap
+(`host`, `cross-site`, `origin`, `jwt`, `dsh-session`), tanpa token atau cookie.
 DSH tetap memakai autentikasi aslinya pada port langsung.
 
 Bridge ini berada di repo deployment, di luar instalasi npm DSH. Update
