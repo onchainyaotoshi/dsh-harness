@@ -27,6 +27,10 @@ import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
+// @ts-ignore — shared executable preflight, also tested directly with Node.
+import { checkUpgrade } from '../scripts/upgrade-preflight.mjs'
+import { pathToFileURL } from 'node:url'
+import { homedir } from 'node:os'
 import { TUNABLES, type CustomSettingsApplied } from './tunables'
 
 export const name = 'custom-settings-host'
@@ -182,12 +186,12 @@ function npmCliPath(): string | null {
 }
 
 /** Jalankan `npm install -g @deepseek-ai/dsh@latest`; resolve {output} / reject {output, message}. */
-function runNpmInstall(npmCli: string): Promise<{ output: string }> {
+function runNpmInstall(npmCli: string, version: string): Promise<{ output: string }> {
   return new Promise((resolve, reject) => {
     let output = ''
     const child = execFile(
       process.execPath,
-      [npmCli, 'install', '-g', '@deepseek-ai/dsh@latest'],
+      [npmCli, 'install', '-g', `@deepseek-ai/dsh@${version}`],
       { timeout: NPM_INSTALL_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, windowsHide: true },
       (err, stdout, stderr) => {
         output = `${stdout ?? ''}\n${stderr ?? ''}`.trim()
@@ -398,7 +402,16 @@ export function apply(ctx: Context, config: Record<string, number>): void {
         } catch {
           /* marker memang belum ada */
         }
-        await runNpmInstall(npmCli)
+        // Fail closed BEFORE replacing the running installation. Use the same
+        // evaluator as DSH startup; never grant version exemptions automatically.
+        const profileRequire = createRequire(join(homedir(), '.dsh/profiles/web/package.json'))
+        const boot = await import(pathToFileURL(profileRequire.resolve('@deepseek-ai/dsh-app-boot')).href)
+        const blockers = checkUpgrade({ targetVersion: latest, evaluate: boot.evaluatePluginCompatibility })
+        if (blockers.length) {
+          sendJson(res, 409, { ok: false, reason: 'plugin-incompatible', blockers })
+          return
+        }
+        await runNpmInstall(npmCli, latest)
         sendJson(res, 200, { ok: true, from: installed, to: latest })
         scheduleRestart()
       } catch (err) {

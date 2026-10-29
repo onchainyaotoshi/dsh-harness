@@ -123,7 +123,20 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';`,
   ],
 }
 
-export const PATCHES = [COMPAT, LEGACY_CLAUDE_SOURCE, COMPAT_MESSAGE_SOURCE, COMPAT_HOOK_SOURCE]
+// Manifest fetch defaults to credentials:omit, even on the same origin.
+// Cloudflare Access therefore cannot authenticate it without this attribute.
+const MANIFEST_CREDENTIALS = {
+  id: 'manifest-credentials',
+  pkg: '@deepseek-ai/dsh-web-frontend',
+  fileRel: 'dist/index.html',
+  marker: '<!-- [dsh-patches:manifest-credentials] -->',
+  steps: [{
+    old: '<link rel="manifest" href="./manifest.webmanifest" />',
+    replacement: '<!-- [dsh-patches:manifest-credentials] -->\n    <link rel="manifest" href="./manifest.webmanifest" crossorigin="use-credentials" />',
+  }],
+}
+
+export const PATCHES = [COMPAT, LEGACY_CLAUDE_SOURCE, COMPAT_MESSAGE_SOURCE, COMPAT_HOOK_SOURCE, MANIFEST_CREDENTIALS]
 
 /**
  * Proses satu file untuk satu patch. Murni (tanpa IO): caller yang menulis.

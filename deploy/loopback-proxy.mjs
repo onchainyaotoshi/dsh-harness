@@ -14,6 +14,17 @@ export function createProxy({ port = 3080, verifyAccess, getDshCookie, hostname,
     if (log) console.warn(`Access request denied: ${reason}`)
     return { status }
   }
+  // Fixed route classes only; combo URLs, session IDs and credentials stay private.
+  const routeClass = req => {
+    const path = req.url?.split('?')[0]
+    if (path === '/') return 'index'
+    if (path === '/manifest.webmanifest') return 'manifest'
+    if (path === '/favicon.ico') return 'favicon'
+    if (/^\/assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(path ?? '')) return `entry:${path.slice(8)}`
+    if (path?.startsWith('/plugins')) return 'plugins'
+    if (path?.startsWith('/api')) return 'api'
+    return 'asset'
+  }
   async function headersFor(req) {
     const headers = { ...req.headers, host: authority }
     if (verifyAccess) {
@@ -25,7 +36,19 @@ export function createProxy({ port = 3080, verifyAccess, getDshCookie, hostname,
         req.headers.upgrade === undefined
       if (req.headers['sec-fetch-site'] === 'cross-site' && !indexNavigation) return rejected('cross-site')
       if (req.headers.origin !== undefined && req.headers.origin !== `https://${hostname}`) return rejected('origin')
-      if (!await verifyAccess(req.headers['cf-access-jwt-assertion'])) return rejected('jwt')
+      let token = req.headers['cf-access-jwt-assertion']
+      // Some edge paths omit the assertion for the browser's manifest fetch.
+      // Its application cookie holds the same signed JWT. Accept it ONLY for
+      // this exact GET when the assertion is absent, using the full verifier.
+      const manifestCookie = token === undefined && req.method === 'GET' &&
+        req.url?.split('?')[0] === '/manifest.webmanifest' && req.headers.upgrade === undefined
+      if (manifestCookie) {
+        const cookies = (req.headers.cookie ?? '').split(';').map(c => c.trim())
+          .filter(c => c.startsWith('CF_Authorization='))
+        if (cookies.length === 1) token = cookies[0].slice('CF_Authorization='.length)
+      }
+      if (!await verifyAccess(token)) return rejected(`jwt-${token ? 'invalid' : 'missing'}:${routeClass(req)}`)
+      if (manifestCookie && log) console.log('Manifest authenticated with verified Access cookie')
       try {
         const cookie = await getDshCookie()
         // Client-supplied DSH cookies cannot override the server-held session.
@@ -57,7 +80,11 @@ export function createProxy({ port = 3080, verifyAccess, getDshCookie, hostname,
     }
     const upstream = http.request({ host: '127.0.0.1', port, method: req.method, path: req.url, headers: result.headers }, upstreamRes => {
       if (log && (req.url?.startsWith('/api') || req.url?.split('?')[0] === '/')) console.log(`${req.method} ${req.url.split('?')[0]} -> ${upstreamRes.statusCode}`)
+      if (log && upstreamRes.statusCode >= 400) console.warn(`Upstream rejected: ${upstreamRes.statusCode}:${routeClass(req)}`)
       const headers = { ...upstreamRes.headers }
+      if (req.method === 'GET' && req.url?.split('?')[0] === '/') {
+        headers['cache-control'] = 'private, no-store'
+      }
       if (verifyAccess && headers['set-cookie']) {
         headers['set-cookie'] = headers['set-cookie'].filter(c => !c.startsWith('dsh-auth-'))
         if (!headers['set-cookie'].length) delete headers['set-cookie']

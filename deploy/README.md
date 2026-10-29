@@ -74,3 +74,12 @@ proxy, bukan hanya keberhasilan proses install.
 Verifikasi terisolasi: `CONNECT_GINEE=readonly NODE_ENV=development node --test tests/access-proxy.test.mjs tests/launch-token.test.mjs`.
 Tes memakai kunci RSA buatan, JWKS tiruan, dan server loopback ephemeral;
 tidak membaca journal atau kredensial pengguna dan tidak mengakses API luar.
+
+Manifest requests behind Access use `crossorigin="use-credentials"` in the
+frontend link (managed by dsh-patches). If the edge omits its assertion header
+for this exact manifest GET, the proxy may validate the application JWT from
+one unambiguous `CF_Authorization` cookie instead. This uses the same signature,
+issuer, audience, expiry and token-type checks; a present but invalid header
+never falls back. Other paths, mutation methods and WebSockets still require
+the assertion header. Index responses are private/no-store to avoid retaining
+old boot HTML across deployment changes.

@@ -66,6 +66,7 @@ interface VersionResponse {
   reason?: string
 }
 interface UpgradeResponse {
+  blockers?: string[]
   ok?: boolean
   from?: string | null
   to?: string | null
@@ -288,10 +289,12 @@ function CustomSettingsSection(props: { scope: ScopeLike }): ReactElement {
       const res = await fetch(`${API}/upgrade`, { method: 'POST' })
       const body = (await res.json()) as UpgradeResponse
       if (!res.ok) {
-        const reason = body.reason === 'upgrade-in-progress' ? 'Upgrade sedang berjalan.'
-          : body.reason === 'already-up-to-date' ? 'Versi sudah terbaru.'
-          : body.reason === 'registry-unreachable' ? 'Registry npm tidak terjangkau.'
-          : body.reason === 'npm-not-found' ? 'npm CLI tidak ditemukan.'
+        const code = body.reason ?? (body as { error?: string }).error
+        const reason = code === 'plugin-incompatible' ? `Upgrade belum kompatibel:\n${body.blockers?.join('\n') ?? ''}`
+          : code === 'upgrade-in-progress' ? 'Upgrade sedang berjalan.'
+          : code === 'already-up-to-date' ? 'Versi sudah terbaru.'
+          : code === 'registry-unreachable' ? 'Registry npm tidak terjangkau.'
+          : code === 'npm-not-found' ? 'npm CLI tidak ditemukan.'
           : 'Upgrade ditolak.'
         setUpgradeState('error')
         setUpgradeError(reason)

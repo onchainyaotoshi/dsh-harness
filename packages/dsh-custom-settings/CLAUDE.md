@@ -209,3 +209,16 @@ bukan timeout default). Nilai lama mungkin tertinggal di
 namespace ini ke `cordis.patch.yml` profil, jangan timpa config lain.
 Status ketiga tunable diverifikasi lewat route dan browser; tes mock mencakup
 save dan volatile schema. Versi peer Schemastery minimal 3.18.4.
+
+## Upgrade compatibility — 29 Oct 2026
+
+Exact DSH peer pins rejected every new patch release. The old upgrade route
+installed global latest but left profile core copies shadowing the new host,
+disabling approval/sandbox and blocking fs/sessionController. Local peers now
+support the 0.2 API series, including prereleases, bounded below 0.3.0-0.
+Dev dependencies remain exact for reproducible builds. Before installation,
+run DSH's own compatibility evaluator against the target version and reject
+profile-owned core packages. Install the exact version checked, never the moving
+latest tag. No automatic allow-version exemptions. A new minor needs migration
+and verification before widening this range. This preflight checks declared
+compatibility, not behavior of unpublished future versions or full integration.

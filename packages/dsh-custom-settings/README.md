@@ -18,7 +18,7 @@ halaman **Settings → Custom Settings** (tab paling bawah).
 - **Cek versi dsh** — versi terpasang tampil otomatis; tombol "Cek versi
   terbaru" membandingkan dengan registry npm.
 - **Upgrade sekali-klik** — saat ada versi baru: tombol Upgrade + dialog
-  konfirmasi → `npm install -g @deepseek-ai/dsh@latest` → dsh restart otomatis
+  konfirmasi → `pemeriksaan kompatibilitas → npm install versi yang diperiksa` → dsh restart otomatis
   (halaman reconnect sendiri, sesi agen aman).
 
 ## Pemasangan
@@ -33,3 +33,10 @@ dsh plugin --profile web add dsh-custom-settings
 Tambah setting baru = tambah satu entri di `src/tunables.ts` (host half),
 rebuild — UI (form + deskripsi + tooltip) ter-render otomatis dari
 `GET /api/tunables`. Lihat `CLAUDE.md` paket untuk arsitektur & lesson learned.
+
+Upgrade memeriksa deklarasi kompatibilitas semua bundle plugin profil sebelum
+mengubah instalasi. Plugin lokal mendukung seri API 0.2; versi 0.3 dan
+selanjutnya memerlukan verifikasi/migrasi terlebih dahulu. Salinan core DSH
+di profil ditolak karena dapat menutupi runtime baru. Dependensi core harus
+mengikuti instalasi host. Pemeriksaan ini bukan jaminan bahwa versi mendatang
+bebas perubahan perilaku; build dan tes tetap diperlukan saat memperluas dukungan.

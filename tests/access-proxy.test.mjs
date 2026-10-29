@@ -225,3 +225,28 @@ test('unconfigured proxy retains manual DSH authentication and Origin rewrite', 
   const res = await request(proxyPort, '/', { origin: 'https://test.example', cookie: 'dsh-auth-fixture=manual' })
   assert.equal(res.status, 401)
 })
+
+test('manifest cookie fallback validates the signed application JWT and stays confined to the exact GET', async t => {
+  const foreign = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  let forwarded = 0
+  const backend = http.createServer((req, res) => { forwarded++; res.end('fixture manifest') })
+  const port = await listen(backend, t)
+  const proxyPort = await listen(createProxy({ port, verifyAccess: verifier(), hostname,
+    getDshCookie: async () => 'dsh-auth-fixture=value' }), t)
+  const headers = { host: hostname, cookie: `CF_Authorization=${jwt()}`, 'sec-fetch-site': 'same-origin' }
+  assert.equal((await request(proxyPort, '/manifest.webmanifest', headers)).status, 200)
+  for (const cookie of ['', 'CF_Authorization=forged', `CF_Authorization=${jwt({ aud: ['other-app'] })}`,
+    `CF_Authorization=${jwt({ exp: start / 1000 - 1 })}`, `CF_Authorization=${jwt({}, {}, foreign.privateKey)}`,
+    `CF_Authorization=${jwt()}; CF_Authorization=${jwt()}`]) {
+    assert.equal((await request(proxyPort, '/manifest.webmanifest', { ...headers, cookie })).status, 403)
+  }
+  for (const [path, supplied, method] of [
+    ['/api/fixture', headers, 'GET'],
+    ['/manifest.webmanifest', headers, 'POST'],
+    ['/manifest.webmanifest', { ...headers, origin: 'https://evil.example' }, 'GET'],
+    ['/manifest.webmanifest', { ...headers, 'sec-fetch-site': 'cross-site' }, 'GET'],
+    ['/manifest.webmanifest', { ...headers, host: 'evil.example' }, 'GET'],
+    ['/manifest.webmanifest', { ...headers, 'cf-access-jwt-assertion': 'forged' }, 'GET'],
+  ]) assert.equal((await request(proxyPort, path, supplied, method)).status, 403)
+  assert.equal(forwarded, 1)
+})

@@ -249,3 +249,12 @@ tersimpan di git history: `git show 11ab1df:packages/file-explorer/CLAUDE.md`.
   workdir per-panggilan tool. Fitur follow-workdir pernah dibangun lalu DIHAPUS
   (25 Aug 2026) karena sinyalnya cuma ada di sesi bridge Claude — jangan
   bangun ulang tanpa sinyal level harness.
+
+## Upgrade policy — 29 Oct 2026
+
+Runtime peers support `>=0.2.0-rc.2 <0.3.0-0`; build dependencies pin the
+verified runtime. Do not pin runtime peers to a single patch, use wildcard
+ranges, or automatically grant allow-version. The web profile must not install
+its own @deepseek-ai/dsh-* core copies: use the host-projected versions instead.
+Custom Settings checks profile compatibility before replacing the host and
+installs the exact checked version. New minor versions require API verification.

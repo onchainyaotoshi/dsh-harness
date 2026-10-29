@@ -155,3 +155,14 @@ Verifikasi history harus menunggu loading history selesai, bukan hanya
 header/slot plugin siap. Tes offline memakai catalog resmi, recovery strict
 dan validation current; bandingkan isi SEMUA pesan sebelum/sesudah migrasi.
 Backup raw log dulu. Artefak/titel/path privat hanya dicatat di deploy lokal.
+
+## Manifest behind Access — 29 Oct 2026
+
+DSH 0.2.1-rc.2 links its manifest without crossorigin. Browsers fetch the
+manifest with credentials omitted even on the same origin; Access therefore
+receives no cookie/JWT and returns 403. The manifest-credentials patch adds
+crossorigin="use-credentials" to the same-origin manifest link. Keep Access
+validation intact; do not make manifest routes public to hide the error.
+HTML is read per request, so applying this patch needs refresh, not restart.
+Patch auto-repair at subsequent boot covers npm upgrades. An unrelated blank
+page cleared after hard refresh; do not attribute that to manifest failure.
