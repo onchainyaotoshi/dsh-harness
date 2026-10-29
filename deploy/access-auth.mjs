@@ -2,6 +2,8 @@ import { createPublicKey, verify } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import http from 'node:http'
+import { open } from 'node:fs/promises'
+import { constants } from 'node:fs'
 
 const run = promisify(execFile)
 
@@ -60,12 +62,32 @@ export function createAccessVerifier({ issuer, audience, fetchKeys = fetch, now 
   }
 }
 
-/** Read only the launch URL belonging to the currently running system service. */
-export async function loadDshToken() {
-  const { stdout: rawPid } = await run('systemctl', ['show', 'dsh.service', '-p', 'MainPID', '--value'], { timeout: 5000 })
+/** Use the private startup record when configured, with a journal fallback for older deployments. */
+export async function loadDshToken({ tokenFile = process.env.DSH_LAUNCH_TOKEN_FILE, runCommand = run } = {}) {
+  if (tokenFile) {
+    const { stdout } = await runCommand('systemctl', ['show', 'dsh.service', '-p', 'MainPID', '-p', 'InvocationID'], { timeout: 5000 })
+    const pid = /^MainPID=([1-9]\d*)$/m.exec(stdout)?.[1]
+    const invocationId = /^InvocationID=([a-f0-9]{32})$/m.exec(stdout)?.[1]
+    if (!pid || !invocationId) throw new Error('DSH service unavailable')
+    const file = await open(tokenFile, constants.O_RDONLY | constants.O_NOFOLLOW)
+    try {
+      const info = await file.stat()
+      if (!info.isFile() || info.uid !== process.getuid() || (info.mode & 0o077) || info.size > 4096) {
+        throw new Error('Unsafe DSH launch token file')
+      }
+      const record = JSON.parse(await file.readFile('utf8'))
+      if (record.invocationId !== invocationId || typeof record.token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(record.token)) {
+        throw new Error('DSH launch token unavailable for current service')
+      }
+      return record.token
+    } finally {
+      await file.close()
+    }
+  }
+  const { stdout: rawPid } = await runCommand('systemctl', ['show', 'dsh.service', '-p', 'MainPID', '--value'], { timeout: 5000 })
   const pid = rawPid.trim()
   if (!/^[1-9]\d*$/.test(pid)) throw new Error('DSH service unavailable')
-  const { stdout } = await run('journalctl', [
+  const { stdout } = await runCommand('journalctl', [
     '-u', 'dsh.service', `_PID=${pid}`, '--no-pager', '-o', 'cat', '-n', '20',
     '--grep', 'http://127\\.0\\.0\\.1:3080/\\?token=',
   ], { timeout: 5000, maxBuffer: 1024 * 1024 })
